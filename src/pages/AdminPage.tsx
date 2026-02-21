@@ -5,9 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
+import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 import { 
   // 🧭 Navigation & Action Icons
   User, 
+  ImageIcon,
   Users,
   ChevronDown, 
   ArrowLeft,
@@ -804,86 +806,125 @@ const uniqueMissionsReport = useMemo(() => {
     </div>
 
     {/* --- Expense Cards --- */}
-    <div className="space-y-3 px-3">
-      {filteredExpenses.map(e => {
-        const userName = e.profiles?.name || e.user_name || "Unknown User";
-        return (
-          <div key={e.id} className="bg-white p-4 rounded-[1.8rem] border border-gray-50 shadow-sm relative overflow-hidden">
-            {/* Header: User Info & Amount */}
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center font-black text-gray-400 text-xs border border-gray-100">
-                   {userName.charAt(0)}
-                </div>
-                <div>
-                   <p className="text-[9px] font-black text-primary uppercase">{userName}</p>
-                   <h4 className="text-[12px] font-bold text-gray-800 line-clamp-1">{e.description || "No Description"}</h4>
-                   <p className="text-[8px] font-bold text-gray-400 uppercase">
-                     {e.date} • {e.mission_name || "General"}
-                   </p>
-                </div>
-              </div>
-              <div className="text-right">
-                 <p className="font-black text-sm text-gray-900 leading-none">₹{Number(e.amount).toLocaleString()}</p>
-                 <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-md inline-block mt-1 ${
-                   e.status === 'pending' ? 'bg-amber-50 text-amber-500' : 
-                   e.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                 }`}>
-                   {e.status}
-                 </span>
-              </div>
+    <div className="space-y-2.5 px-3">
+  {filteredExpenses.map((e) => {
+    const userName = e.profiles?.name || e.user_name || "Unknown User";
+    const receiptImage = e.image_url;
+
+    return (
+      <div 
+        key={e.id} 
+        className="bg-white p-3.5 rounded-[1.6rem] border border-gray-50 shadow-sm relative overflow-hidden transition-all hover:shadow-md"
+      >
+        {/* Header: User Info & Amount */}
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex gap-2.5">
+            {/* User Initial Circle - Slightly Smaller */}
+            <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center font-black text-slate-400 text-[10px] border border-slate-100 flex-shrink-0">
+              {userName.charAt(0)}
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2.5 border-t border-gray-100 pt-4 mt-2">
-  {/* Logic: Agar pending hai toh Approve aur Reject dono dikhao, agar approved hai toh sirf Reject (Undo) ka option */}
-  {e.status === 'pending' ? (
-    <>
-      <button 
-        onClick={() => approveExpense(e.id)} 
-        className="flex-[2] flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[1.2rem] text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-200 transition-all active:scale-95"
-      >
-        <CheckCircle className="w-3.5 h-3.5" />
-        Approve
-      </button>
-      
-      <button 
-        onClick={() => rejectExpense(e.id)} 
-        className="flex-1 flex items-center justify-center gap-2 py-3 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-[1.2rem] text-[10px] font-black uppercase tracking-wider border border-rose-100 transition-all active:scale-95"
-      >
-        <XCircle className="w-3.5 h-3.5" />
-        Reject
-      </button>
-    </>
-  ) : (
-    /* Status Approved ya Rejected hai toh sirf 'Change Status' ya Revert button */
-    <button 
-      onClick={() => e.status === 'approved' ? rejectExpense(e.id) : approveExpense(e.id)} 
-      className={`flex-[3] flex items-center justify-center gap-2 py-3 rounded-[1.2rem] text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-        e.status === 'approved' 
-        ? "bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-100" 
-        : "bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100"
-      }`}
-    >
-      <RefreshCw className="w-3.5 h-3.5" />
-      {e.status === 'approved' ? 'Revert to Reject' : 'Mark as Approved'}
-    </button>
-  )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-[8px] font-black text-primary uppercase tracking-wider">
+                  {userName}
+                </p>
+                <span className="text-[7px] font-bold text-gray-300">• {e.date}</span>
+              </div>
+              <h4 className="text-[11px] font-bold text-gray-800 line-clamp-1 leading-tight">
+                {e.description || "No Description"}
+              </h4>
 
-  {/* Delete Button - Sophisticated Minimalist */}
-  <button 
-    onClick={() => {
-      if(window.confirm("Delete this record?")) deleteExpense(e.id)
-    }}
-    className="w-11 h-11 bg-gray-50 hover:bg-rose-50 text-gray-400 hover:text-rose-500 rounded-[1.2rem] flex items-center justify-center transition-all active:scale-95 border border-transparent hover:border-rose-100"
-  >
-    <Trash2 className="w-4 h-4" />
-  </button>
-</div>
+              {/* 📸 IMAGE SECTION: Compact Preview */}
+              {receiptImage ? (
+                <div
+                  onClick={() => setSelectedPreviewImage(receiptImage)}
+                  className="mt-1.5 w-11 h-11 rounded-xl border border-slate-100 overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/10 transition-all group relative bg-slate-50"
+                >
+                  <img
+                    src={receiptImage}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    alt="Receipt"
+                  />
+                  <div className="absolute inset-0 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[6px] font-black text-white bg-black/40 px-1 py-0.5 rounded">VIEW</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[7px] font-bold text-slate-300 uppercase italic mt-1">No Receipt</p>
+              )}
+            </div>
           </div>
-        )
-      })}
-    </div>
+
+          <div className="text-right flex-shrink-0">
+            <p className="font-black text-[13px] text-gray-900 leading-none">
+              ₹{Number(e.amount).toLocaleString()}
+            </p>
+            <span
+              className={`text-[6px] font-black uppercase px-1.5 py-0.5 rounded-md inline-block mt-1.5 ${
+                e.status === "pending"
+                  ? "bg-amber-50 text-amber-500"
+                  : e.status === "approved"
+                  ? "bg-emerald-50 text-emerald-600"
+                  : "bg-rose-50 text-rose-600"
+              }`}
+            >
+              {e.status}
+            </span>
+          </div>
+        </div>
+
+        {/* Actions Area - Slimmer & Tight */}
+        <div className="flex gap-2 border-t border-slate-50 pt-3 mt-1.5">
+          {e.status === "pending" ? (
+            <>
+              <button
+                onClick={() => approveExpense(e.id)}
+                className="flex-[2] flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 text-white rounded-[1rem] text-[9px] font-black uppercase tracking-wider shadow-sm active:scale-95 transition-all"
+              >
+                <CheckCircle className="w-3 h-3" /> Approve
+              </button>
+              <button
+                onClick={() => rejectExpense(e.id)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-rose-50 text-rose-500 rounded-[1rem] text-[9px] font-black uppercase tracking-wider border border-rose-100 active:scale-95 transition-all"
+              >
+                <XCircle className="w-3 h-3" /> Reject
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() =>
+                e.status === "approved" ? rejectExpense(e.id) : approveExpense(e.id)
+              }
+              className={`flex-[3] flex items-center justify-center gap-1.5 py-2.5 rounded-[1rem] text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                e.status === "approved"
+                  ? "bg-amber-50 text-amber-600 border border-amber-100"
+                  : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+              }`}
+            >
+              <RefreshCw className="w-3 h-3" />
+              {e.status === "approved" ? "Revert to Reject" : "Mark as Approved"}
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              if (window.confirm("Delete?")) deleteExpense(e.id);
+            }}
+            className="w-9 h-9 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-[1rem] flex items-center justify-center border border-transparent hover:border-rose-100 active:scale-95 transition-all"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  })}
+
+  <ImagePreviewModal
+    imageUrl={selectedPreviewImage}
+    onClose={() => setSelectedPreviewImage(null)}
+  />
+</div>
   </div>
 )}
         {/* 6. Added Settlements Tab Content with matching design */}
@@ -1107,14 +1148,11 @@ const uniqueMissionsReport = useMemo(() => {
 )}
 
     {/* 🖼️ 5. IMAGE PREVIEW (Universal) */}
-    {selectedPreviewImage && (
-      <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in zoom-in-95 duration-200" onClick={() => setSelectedPreviewImage(null)}>
-        <div className="relative max-w-lg w-full">
-           <img src={selectedPreviewImage} className="w-full h-auto max-h-[85vh] object-contain rounded-[2.5rem] shadow-2xl border-4 border-white/10" alt="Full Preview" />
-           <p className="text-white/40 text-[9px] text-center font-black uppercase tracking-[0.4em] mt-6 animate-pulse">Tap to Close</p>
-        </div>
-      </div>
-    )}
+   {/* 🖼️ IMAGE PREVIEW (Using Imported Component) */}
+    <ImagePreviewModal 
+      imageUrl={selectedPreviewImage} 
+      onClose={() => setSelectedPreviewImage(null)} 
+    />
   </div>
 )}
         {/* Users Tab - Same as your code */}
