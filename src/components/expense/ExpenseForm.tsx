@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, X, Camera, Eye, CloudUpload, Loader2,Check } from "lucide-react";
+import { Plus, X, Camera, Eye, CloudUpload, Loader2,Check,Send } from "lucide-react";
 import ImagePreviewModal from "./ImagePreviewModal";
 
 interface SubRow {
@@ -431,12 +431,22 @@ const uploadImage = async (cardId: string, subId: string) => {
       </button>
 
       <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full mt-4 bg-primary text-primary-foreground py-4.5 rounded-[2rem] font-black shadow-2xl uppercase text-[11px] tracking-[0.2em] active:scale-[0.97] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-      >
-        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save to Cloud"}
-      </button>
+  onClick={handleSave}
+  disabled={saving}
+  className="w-full mt-6 bg-primary text-primary-foreground py-3.5 rounded-xl font-black uppercase text-[10px] tracking-[0.15em] shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+>
+  {saving ? (
+    <>
+      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      <span>Processing...</span>
+    </>
+  ) : (
+    <>
+      <Send className="w-3.5 h-3.5" />
+      <span>Submit Entry</span>
+    </>
+  )}
+</button>
 
       <ImagePreviewModal imageUrl={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
