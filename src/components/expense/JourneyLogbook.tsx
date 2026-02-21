@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Camera, Eye, Loader2, Save, X } from "lucide-react";
+import { 
+  Camera, Eye, Save, X, Loader2, 
+  ChevronDown, Lock as LockKeyhole, ChevronRight // 'Lock as LockIcon' add kiya
+} from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ImagePreviewModal from "./ImagePreviewModal";
 
@@ -48,6 +51,20 @@ interface Props {
 }
 
 export default function JourneyLogbook({ userId, refreshKey }: Props) {
+
+// Layer 3 Collapse State
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+
+  // Image Upload & Preview States
+  const [selectedFile, setSelectedFile] = useState<{ [key: string]: File | null }>({});
+  const [localPreview, setLocalPreview] = useState<{ [key: string]: string | null }>({});
+
+  // Image Selection Function (Jo handleFileSelect wala error fix karega)
+  const handleFileSelect = (entryId: string, file: File) => {
+    setSelectedFile(prev => ({ ...prev, [entryId]: file }));
+    setLocalPreview(prev => ({ ...prev, [entryId]: URL.createObjectURL(file) }));
+  };
+
   const [missions, setMissions] = useState<Mission[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expandedMissions, setExpandedMissions] = useState<Set<string>>(new Set());
@@ -106,22 +123,88 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
     setEditValues({ description: entry.description, amount: String(entry.amount) });
   };
 
-  const saveEdit = async (entryId: string) => {
-    setSavingId(entryId);
-    const { error } = await supabase.from("expenses").update({
-      description: editValues.description,
-      amount: parseFloat(editValues.amount) || 0,
-    }).eq("id", entryId);
+ const saveEdit = async (entryId: string) => {
+  console.log("Save process started for:", entryId);
+  setSavingId(entryId);
+  
+  const currentEntry = expenses.find(e => e.id === entryId);
+  let finalImageUrl = currentEntry?.image_url || null;
 
-    if (error) {
-      toast.error("Update failed");
-    } else {
-      toast.success("Updated!");
-      setExpenses(prev => prev.map(e => e.id === entryId ? { ...e, description: editValues.description, amount: parseFloat(editValues.amount) || 0 } : e));
-      setEditingRow(null);
+  try {
+    // 1. Check if a new file is selected in local state
+    if (selectedFile[entryId]) {
+      console.log("New file detected, starting upload...");
+      const file = selectedFile[entryId]!;
+      
+      // File name prepare karein
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}/${Date.now()}.${fileExt}`;
+      const filePath = fileName;
+
+      // A. PURANI IMAGE DELETE (Optional but clean)
+      if (currentEntry?.image_url) {
+        const oldPath = currentEntry.image_url.split('/').pop();
+        await supabase.storage.from("expense-receipts").remove([`${userId}/${oldPath}`]);
+      }
+
+      // B. ACTUAL UPLOAD
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("expense-receipts")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        console.error("Storage Upload Error:", uploadError);
+        throw new Error("Image upload failed: " + uploadError.message);
+      }
+
+      console.log("Upload successful:", uploadData.path);
+
+      // C. GET PUBLIC URL
+      const { data: urlData } = supabase.storage
+        .from("expense-receipts")
+        .getPublicUrl(uploadData.path);
+        
+      finalImageUrl = urlData.publicUrl;
+      console.log("New Public URL:", finalImageUrl);
     }
+
+    // 2. DATABASE UPDATE
+    console.log("Updating Database with URL:", finalImageUrl);
+    const { error: dbError } = await supabase
+      .from("expenses")
+      .update({
+        description: editValues.description,
+        amount: parseFloat(editValues.amount) || 0,
+        image_url: finalImageUrl // Ye value null nahi honi chahiye agar upload hua hai
+      })
+      .eq("id", entryId);
+
+    if (dbError) {
+      console.error("Database Update Error:", dbError);
+      throw new Error("Database update failed: " + dbError.message);
+    }
+
+    // 3. SUCCESS - UI Update
+    toast.success("Updated Successfully!");
+    setExpenses(prev => prev.map(e => e.id === entryId ? { 
+      ...e, 
+      description: editValues.description, 
+      amount: parseFloat(editValues.amount) || 0,
+      image_url: finalImageUrl 
+    } : e));
+    
+    // States Cleanup
+    setEditingRow(null);
+    setSelectedFile(prev => ({ ...prev, [entryId]: null }));
+    setLocalPreview(prev => ({ ...prev, [entryId]: null }));
+
+  } catch (err: any) {
+    console.error("Final Catch Error:", err);
+    toast.error(err.message || "An error occurred");
+  } finally {
     setSavingId(null);
-  };
+  }
+};
 
   const handleImageUpload = async (entryId: string, file: File) => {
     setUploadingId(entryId);
@@ -146,103 +229,180 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
     setUploadingId(null);
   };
 
-  const renderExpenseEntry = (entry: Expense, editable: boolean) => (
-    <div key={entry.id} className="bg-secondary/30 rounded-xl p-3 animate-fade-in border border-border/50">
-      {editingRow === entry.id && editable ? (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`w-2 h-2 rounded-full ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
-            <span className="text-[9px] font-black text-muted-foreground uppercase">{entry.category}</span>
-          </div>
-          <input
-            value={editValues.description}
-            onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
-            className="w-full text-[11px] font-bold bg-card p-2 rounded-lg border border-border outline-none focus:border-primary text-foreground"
-            placeholder="Description"
-          />
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center bg-card px-2 py-1.5 rounded-lg border border-border">
-              <span className="text-[10px] font-black text-primary/60 mr-1">₹</span>
-              <input
-                type="number"
-                value={editValues.amount}
-                onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
-                className="w-full bg-transparent font-black text-[11px] outline-none text-right text-primary"
-              />
-            </div>
-            <button
-              onClick={() => saveEdit(entry.id)}
-              disabled={savingId === entry.id}
-              className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[9px] font-black uppercase flex items-center gap-1"
-            >
-              {savingId === entry.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-              Save
-            </button>
-            <button onClick={() => setEditingRow(null)} className="h-8 px-2 rounded-lg bg-secondary text-muted-foreground text-[9px] font-black">
-              Cancel
-            </button>
-          </div>
+  const renderExpenseEntry = (entry: Expense, editable: boolean) => {
+  const isDetailOpen = expandedEntry === entry.id;
+  const isApproved = entry.status === "approved" || entry.status === "settled";
+  
+  // Nayi select ki hui image pehle dikhao, warna database waali
+  const currentImageToShow = localPreview[entry.id] || entry.image_url;
+
+  return (
+    <div key={entry.id} className="border-t border-border/10 first:border-t-0">
+      {/* --- LAYER 3 HEADER --- */}
+      <button
+        onClick={() => setExpandedEntry(isDetailOpen ? null : entry.id)}
+        className="w-full py-3 flex justify-between items-center hover:bg-white/40 text-left px-1"
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
+          <span className="text-[10px] font-bold text-foreground truncate uppercase">{entry.description || "No Detail"}</span>
         </div>
-      ) : (
-        <div>
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
-              <span className="text-[9px] font-black text-muted-foreground uppercase flex-shrink-0">{entry.category}</span>
-              <span className="text-[10px] font-bold text-foreground truncate">{entry.description}</span>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-              <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[entry.status] || ""}`}>
-                {entry.status}
-              </span>
-              <span className={`text-[11px] font-black ${entry.category === "cash" ? "text-success" : "text-destructive"}`}>
-                {entry.category === "cash" ? "+" : "-"}₹{Number(entry.amount).toLocaleString()}
-              </span>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 ml-2">
+          <span className={`text-[10px] font-black ${entry.category === "cash" ? "text-success" : "text-foreground/80"}`}>
+            ₹{Number(entry.amount).toLocaleString()}
+          </span>
+          <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isDetailOpen ? "rotate-180" : ""}`} />
+        </div>
+      </button>
 
-          {entry.rejected_reason && (
-            <p className="text-[8px] text-destructive mt-1 pl-4 italic">Reason: {entry.rejected_reason}</p>
-          )}
+      {/* --- LAYER 3 CONTENT --- */}
+      {isDetailOpen && (
+        <div className="pb-3 px-1">
+          {editingRow === entry.id && editable && !isApproved ? (
+            /* --- EDIT MODE --- */
+            <div className="bg-card p-3 rounded-xl border border-primary/20 space-y-3 shadow-inner">
+              <div className="flex gap-3">
+                {/* Image Selector with Local Preview */}
+                <div className="relative">
+                  <label className="relative w-16 h-16 rounded-lg bg-secondary/50 border border-dashed border-border flex flex-col items-center justify-center cursor-pointer overflow-hidden group">
+                    {currentImageToShow ? (
+                      <img src={currentImageToShow} className="w-full h-full object-cover" alt="Selected" />
+                    ) : (
+                      <>
+                        <Camera className="w-4 h-4 text-muted-foreground/40" />
+                        <span className="text-[7px] font-black text-muted-foreground/60 uppercase">Add</span>
+                      </>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[8px] text-white font-black uppercase">Change</span>
+                    </div>
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={e => e.target.files?.[0] && handleFileSelect(entry.id, e.target.files[0])} 
+                    />
+                  </label>
+                  
+                  {/* Delete Image Button (X) */}
+                  {currentImageToShow && (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setLocalPreview(prev => ({ ...prev, [entry.id]: null }));
+                        setSelectedFile(prev => ({ ...prev, [entry.id]: null }));
+                        // Note: Agar aapko database se image null karni hai turant, toh yahan ek confirm() daal sakte hain
+                      }}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 shadow-lg border-2 border-card"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
 
-          <div className="flex items-center gap-2 mt-2 pl-4">
-            {entry.image_url && (
-              <>
-                <button onClick={() => setPreviewImage(entry.image_url)} className="w-7 h-7 rounded-lg overflow-hidden border border-border relative">
-                  <img src={entry.image_url} className="w-full h-full object-cover" alt="" />
+                <div className="flex-1 space-y-2">
+                  <input
+                    value={editValues.description}
+                    onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+                    className="w-full text-[11px] font-bold bg-secondary/50 p-2 rounded-lg border border-border outline-none focus:border-primary"
+                    placeholder="Description"
+                  />
+                  <div className="flex items-center bg-secondary/50 p-2 rounded-lg border border-border">
+                    <span className="text-[10px] font-black text-muted-foreground mr-1">₹</span>
+                    <input
+                      type="number"
+                      value={editValues.amount}
+                      onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
+                      className="w-full bg-transparent text-[11px] font-black outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button 
+                  onClick={() => saveEdit(entry.id)} 
+                  disabled={savingId === entry.id}
+                  className="flex-1 bg-primary text-white py-2 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                >
+                  {savingId === entry.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Save Changes
                 </button>
-                <button onClick={() => setPreviewImage(entry.image_url)} className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center">
-                  <Eye className="w-3 h-3" />
+                <button 
+                  onClick={() => {
+                    setEditingRow(null);
+                    setLocalPreview(prev => ({ ...prev, [entry.id]: null }));
+                    setSelectedFile(prev => ({ ...prev, [entry.id]: null }));
+                  }} 
+                  className="px-4 bg-secondary text-muted-foreground rounded-lg text-[10px] font-black uppercase"
+                >
+                  Cancel
                 </button>
-              </>
-            )}
-
-            {editable && !entry.image_url && (
-              <label className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                {uploadingId === entry.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+              </div>
+            </div>
+          ) : (
+            /* --- VIEW MODE --- */
+            <div className="bg-white p-2.5 rounded-xl border border-border/50 flex gap-3 shadow-sm">
+              <div className="relative flex-shrink-0">
+                {entry.image_url ? (
+                  <div className="relative w-14 h-14">
+                    <img src={entry.image_url} className="w-full h-full rounded-lg object-cover border" alt="receipt" />
+                    <button 
+                      onClick={() => setPreviewImage(entry.image_url)} 
+                      className="absolute inset-0 bg-black/20 flex items-center justify-center rounded-lg opacity-0 hover:opacity-100 transition-opacity"
+                    >
+                      <Eye className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
                 ) : (
-                  <Camera className="w-3 h-3 text-muted-foreground" />
+                  <div className="w-14 h-14 rounded-lg bg-secondary/50 flex flex-col items-center justify-center border border-dashed border-border/60">
+                    <Camera className="w-4 h-4 text-muted-foreground/30" />
+                    <span className="text-[6px] font-bold text-muted-foreground/40 mt-1">NO IMAGE</span>
+                  </div>
                 )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={e => e.target.files?.[0] && handleImageUpload(entry.id, e.target.files[0])}
-                />
-              </label>
-            )}
+              </div>
 
-            {editable && entry.status === "pending" && (
-              <button onClick={() => startEdit(entry)} className="text-[8px] font-black text-primary underline ml-auto">
-                Edit
-              </button>
-            )}
-          </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                <div className="flex justify-between items-start">
+                  <span className={`text-[7px] px-2 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[entry.status]}`}>
+                    {entry.status}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[8px] font-black text-muted-foreground uppercase">{entry.category}</span>
+                    {isApproved && <LockKeyhole className="w-2.5 h-2.5 text-success/60" />}
+                    {entry.image_url && (
+                       <button onClick={() => setPreviewImage(entry.image_url)} className="p-1 bg-primary/10 rounded-md">
+                         <Eye className="w-3 h-3 text-primary" />
+                       </button>
+                    )}
+                  </div>
+                </div>
+                
+                {entry.rejected_reason && (
+                  <p className="text-[8px] text-destructive font-bold italic mt-1 leading-tight">⚠ {entry.rejected_reason}</p>
+                )}
+
+                <div className="flex justify-between items-end mt-2">
+                  <p className="text-[9px] text-muted-foreground font-medium italic">
+                    {isApproved ? "Verification Complete" : "Pending Review"}
+                  </p>
+                  {editable && !isApproved && (
+                    <button 
+                      onClick={() => startEdit(entry)} 
+                      className="text-[9px] font-black text-primary underline active:opacity-50"
+                    >
+                      Edit Entry
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+};
 
   // Active missions: show dates expanded inline (no mission-level accordion needed)
   const renderActiveMission = (mission: Mission) => {
