@@ -636,20 +636,28 @@ const uniqueMissionsReport = useMemo(() => {
           <h1 className="text-lg font-black italic tracking-tighter text-background">Admin Panel</h1>
           <Shield className="w-5 h-5 text-primary" />
         </div>
-        <div className="flex gap-1 overflow-x-auto no-scrollbar">
-          {tabs.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex-1 min-w-[70px] py-2 rounded-xl text-[8px] font-black uppercase tracking-wider flex flex-col items-center gap-1 transition-all ${
-                tab === t.key ? "bg-primary text-primary-foreground" : "bg-background/10 text-background/50"
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-nowrap gap-1 w-full overflow-hidden items-stretch px-1">
+  {tabs.map(t => (
+    <button
+      key={t.key}
+      onClick={() => setTab(t.key)}
+      /* min-w-0 aur flex-1 ensures perfect horizontal fit without scroll */
+      className={`flex-1 min-w-0 py-2.5 rounded-xl text-[7px] font-black uppercase tracking-tighter flex flex-col items-center justify-center gap-1 transition-all border ${
+        tab === t.key 
+          ? "bg-primary text-primary-foreground border-transparent shadow-sm scale-[1.02]" 
+          : "bg-background/10 text-background/40 border-transparent"
+      }`}
+    >
+      {/* Icon size ko bhi thoda compact kiya hai taaki label ke liye jagah bache */}
+      <span className="scale-75 origin-center">
+        {t.icon}
+      </span>
+      <span className="truncate w-full text-center px-0.5">
+        {t.label}
+      </span>
+    </button>
+  ))}
+</div>
       </div>
 
       <div className="p-4 pb-24">
@@ -757,27 +765,28 @@ const uniqueMissionsReport = useMemo(() => {
         </div>
 
         {/* Status Pills - Fixed to Google Colors */}
-        <div className="flex gap-1.5">
-          {['all', 'pending', 'approved', 'rejected'].map((s) => {
-            const isActive = searchFilters.status === s;
-            const googleColors: any = {
-              all: isActive ? 'bg-gray-800 text-white' : 'bg-white text-gray-400',
-              pending: isActive ? 'bg-[#FBBC05] text-white' : 'bg-white text-gray-400 hover:text-[#FBBC05]',
-              approved: isActive ? 'bg-[#34A853] text-white' : 'bg-white text-gray-400 hover:text-[#34A853]',
-              rejected: isActive ? 'bg-[#EA4335] text-white' : 'bg-white text-gray-400 hover:text-[#EA4335]'
-            };
+        <div className="flex flex-nowrap gap-1 w-full overflow-hidden">
+  {['all', 'pending', 'approved', 'rejected'].map((s) => {
+    const isActive = searchFilters.status === s;
+    const googleColors: any = {
+      all: isActive ? 'bg-gray-800 text-white' : 'bg-white text-gray-400',
+      pending: isActive ? 'bg-[#FBBC05] text-white' : 'bg-white text-gray-400 hover:text-[#FBBC05]',
+      approved: isActive ? 'bg-[#34A853] text-white' : 'bg-white text-gray-400 hover:text-[#34A853]',
+      rejected: isActive ? 'bg-[#EA4335] text-white' : 'bg-white text-gray-400 hover:text-[#EA4335]'
+    };
 
-            return (
-              <button
-                key={s}
-                onClick={() => setSearchFilters({...searchFilters, status: s})}
-                className={`text-[9px] font-black uppercase px-4 py-2 rounded-full transition-all border border-gray-100 ${googleColors[s]} ${isActive ? 'shadow-md scale-105 border-transparent' : ''}`}
-              >
-                {s}
-              </button>
-            )
-          })}
-        </div>
+    return (
+      <button
+        key={s}
+        onClick={() => setSearchFilters({...searchFilters, status: s})}
+        /* flex-1 aur text-[7px] ensure karenge ki sab ek hi line mein rahein */
+        className={`flex-1 min-w-0 py-2 rounded-full text-[7px] font-black uppercase transition-all border border-gray-100 truncate ${googleColors[s]} ${isActive ? 'shadow-sm border-transparent scale-105' : ''}`}
+      >
+        {s}
+      </button>
+    )
+  })}
+</div>
       </div>
     </div>
   </div>
