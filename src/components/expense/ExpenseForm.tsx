@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, X, Camera, Eye, CloudUpload, Loader2 } from "lucide-react";
+import { Plus, X, Camera, Eye, CloudUpload, Loader2,Check } from "lucide-react";
 import ImagePreviewModal from "./ImagePreviewModal";
 
 interface SubRow {
@@ -35,8 +35,13 @@ const SUB_ROW_COLORS = [
   "bg-blue-50/90", "bg-green-50/90", "bg-amber-50/90", "bg-red-50/90", "bg-purple-50/90",
 ];
 
+// FIXED: Universal ID Generator to prevent crashes
+function generateSafeId() {
+  return Math.random().toString(36).substring(2, 11);
+}
+
 function createSubRow(): SubRow {
-  return { id: crypto.randomUUID(), description: "", amount: "", imageFile: null, imagePreview: null, uploadedUrl: null, uploading: false };
+  return { id: generateSafeId(), description: "", amount: "", imageFile: null, imagePreview: null, uploadedUrl: null, uploading: false };
 }
 
 export default function ExpenseForm({
@@ -53,7 +58,7 @@ export default function ExpenseForm({
   onSaved: () => void;
 }) {
   const [cards, setCards] = useState<ExpenseCard[]>([
-    { id: crypto.randomUUID(), category: "", subRows: [createSubRow()] },
+    { id: generateSafeId(), category: "", subRows: [createSubRow()] },
   ]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
@@ -65,7 +70,7 @@ export default function ExpenseForm({
   }, 0);
 
   const addCard = () => {
-    setCards([...cards, { id: crypto.randomUUID(), category: "", subRows: [createSubRow()] }]);
+    setCards([...cards, { id: generateSafeId(), category: "", subRows: [createSubRow()] }]);
   };
 
   const removeCard = (cardId: string) => {
@@ -85,45 +90,114 @@ export default function ExpenseForm({
   };
 
   const updateSubRow = (cardId: string, subId: string, field: string, value: any) => {
-    setCards(cards.map(c =>
-      c.id === cardId
-        ? { ...c, subRows: c.subRows.map(s => s.id === subId ? { ...s, [field]: value } : s) }
-        : c
-    ));
-  };
+  setCards(prevCards => prevCards.map(card => {
+    if (card.id === cardId) {
+      return {
+        ...card,
+        subRows: card.subRows.map(row => 
+          // YAHAN Galti hoti hai: row ko copy karna zaroori hai (...row)
+          row.id === subId ? { ...row, [field]: value } : row 
+        )
+      };
+    }
+    return card;
+  }));
+};
 
-  const handleImageSelect = (cardId: string, subId: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      updateSubRow(cardId, subId, "imageFile", file);
-      updateSubRow(cardId, subId, "imagePreview", e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
+const handleImageSelect = async (cardId: string, subId: string, file: File) => {
+  if (!file) return;
 
-  const uploadImage = async (cardId: string, subId: string) => {
+  // 1. Local Preview URL create karein (FileReader se fast hai ye)
+  const previewUrl = URL.createObjectURL(file);
+  
+  // 2. State update karein (Taaki image TURANT dikhe)
+  updateSubRow(cardId, subId, "imagePreview", previewUrl);
+  updateSubRow(cardId, subId, "uploading", true);
+
+  try {
     const card = cards.find(c => c.id === cardId);
     const row = card?.subRows.find(s => s.id === subId);
-    if (!row?.imageFile) return;
 
-    updateSubRow(cardId, subId, "uploading", true);
-    const fileName = `${userId}/${Date.now()}_${row.imageFile.name}`;
-    const { data, error } = await supabase.storage
+    // Purani image delete logic (agar pehle se upload thi)
+    if (row?.uploadedUrl) {
+      const oldFileName = row.uploadedUrl.split('/').pop();
+      if (oldFileName) {
+        await supabase.storage.from("expense-receipts").remove([`${userId}/${oldFileName}`]);
+      }
+    }
+
+    // Nayi image upload karein
+    const fileName = `${userId}/${Date.now()}.${file.name.split('.').pop()}`;
+    const { data, error: uploadError } = await supabase.storage
+      .from("expense-receipts")
+      .upload(fileName, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage.from("expense-receipts").getPublicUrl(data.path);
+
+    // 3. Server URL state mein save karein
+    updateSubRow(cardId, subId, "uploadedUrl", urlData.publicUrl);
+    
+  } catch (error: any) {
+    console.error("Upload failed:", error);
+    toast.error("Upload failed, but preview is shown locally.");
+  } finally {
+    updateSubRow(cardId, subId, "uploading", false);
+  }
+};
+const uploadImage = async (cardId: string, subId: string) => {
+  const card = cards.find(c => c.id === cardId);
+  const row = card?.subRows.find(s => s.id === subId);
+  
+  if (!row?.imageFile) return;
+
+  updateSubRow(cardId, subId, "uploading", true);
+
+  try {
+    // 1. PURANI IMAGE DELETE KARNA (Agar 'uploadedUrl' pehle se maujood hai)
+    if (row.uploadedUrl) {
+      try {
+        // URL se filename nikalne ka logic
+        const oldPath = row.uploadedUrl.split('/').pop();
+        if (oldPath) {
+          await supabase.storage
+            .from("expense-receipts")
+            .remove([`${userId}/${oldPath}`]);
+          console.log("Old file deleted successfully");
+        }
+      } catch (delError) {
+        console.error("Old file deletion failed:", delError);
+        // Error aane par bhi hum upload continue rakhenge
+      }
+    }
+
+    // 2. NAYI IMAGE UPLOAD KARNA
+    const fileExt = row.imageFile.name.split('.').pop();
+    const fileName = `${userId}/${Date.now()}.${fileExt}`; // Timestamp based unique name
+
+    const { data, error: uploadError } = await supabase.storage
       .from("expense-receipts")
       .upload(fileName, row.imageFile);
 
-    if (error) {
-      toast.error("Upload failed");
-      updateSubRow(cardId, subId, "uploading", false);
-      return;
-    }
+    if (uploadError) throw uploadError;
 
-    const { data: urlData } = supabase.storage.from("expense-receipts").getPublicUrl(data.path);
+    // 3. PUBLIC URL LENA
+    const { data: urlData } = supabase.storage
+      .from("expense-receipts")
+      .getPublicUrl(data.path);
+
+    // 4. STATE UPDATE
     updateSubRow(cardId, subId, "uploadedUrl", urlData.publicUrl);
     updateSubRow(cardId, subId, "uploading", false);
-    toast.success("Image uploaded!");
-  };
+    toast.success("Image updated & old one deleted!");
 
+  } catch (error: any) {
+    console.error("Upload error:", error);
+    toast.error(error.message || "Upload failed");
+    updateSubRow(cardId, subId, "uploading", false);
+  }
+};
   const checkLimits = (category: string, amount: number): boolean => {
     const limit = categoryLimits[category];
     if (!limit || limit === 0) return true;
@@ -140,75 +214,98 @@ export default function ExpenseForm({
   };
 
   const handleSave = async () => {
-    const allLogs: any[] = [];
-    for (const card of cards) {
-      if (!card.category) continue;
-      for (const row of card.subRows) {
-        if (!row.description && !row.amount) continue;
-        allLogs.push({
-          user_id: userId,
-          mission_id: missionId,
-          date,
-          category: card.category,
-          description: row.description,
-          amount: parseFloat(row.amount) || 0,
-          image_url: row.uploadedUrl || null,
-          status: "pending",
-        });
-      }
-    }
+  const allLogs: any[] = [];
+  
+  // 1. Data Structure Prepare karein
+  for (const card of cards) {
+    if (!card.category) continue;
+    
+    for (const row of card.subRows) {
+      // Sirf wahi rows uthao jinme description ya amount ho
+      if (!row.description && !row.amount) continue;
 
-    if (allLogs.length === 0) {
-      toast.error("Add at least one expense entry!");
-      return;
-    }
+      const amountValue = parseFloat(row.amount) || 0;
 
-    // Check limits
-    for (const log of allLogs) {
-      if (!checkLimits(log.category, log.amount)) {
-        toast.warning(`${log.category} exceeds daily limit — requires admin approval`);
-      }
+      allLogs.push({
+        user_id: userId,
+        mission_id: missionId,
+        date: date, // Make sure 'date' state sahi format mein ho (YYYY-MM-DD)
+        category: card.category,
+        description: row.description,
+        amount: amountValue,
+        image_url: row.uploadedUrl || null, // Auto-uploaded URL yahan se jayega
+        status: "pending",
+      });
     }
+  }
 
-    setSaving(true);
+  // 2. Validation
+  if (allLogs.length === 0) {
+    toast.error("Add at least one expense entry!");
+    return;
+  }
+
+  // 3. Limit Checks (Optional Warning)
+  for (const log of allLogs) {
+    if (!checkLimits(log.category, log.amount)) {
+      toast.warning(`${log.category} exceeds daily limit — admin approval needed`);
+    }
+  }
+
+  // 4. Final Database Insert
+  setSaving(true);
+  try {
     const { error } = await supabase.from("expenses").insert(allLogs);
-    if (error) {
-      toast.error("Save failed: " + error.message);
-    } else {
-      toast.success("Expenses saved!");
-      setCards([{ id: crypto.randomUUID(), category: "", subRows: [createSubRow()] }]);
-      onSaved();
-    }
+    
+    if (error) throw error;
+
+    toast.success("All expenses saved to cloud!");
+    
+    // UI Reset: Form ko wapas initial state mein lana
+    setCards([{ 
+      id: generateSafeId(), 
+      category: "", 
+      subRows: [createSubRow()] 
+    }]);
+    
+    if (onSaved) onSaved(); // Callback to refresh the parent list
+
+  } catch (error: any) {
+    console.error("Save Error:", error);
+    toast.error("Save failed: " + error.message);
+  } finally {
     setSaving(false);
-  };
+  }
+};
 
   return (
-    <div className="mt-6 glass-card rounded-4xl p-5 animate-fade-in">
+    <div className="mt-6 glass-card rounded-4xl p-5 animate-fade-in shadow-2xl border border-white/20">
       <div className="flex justify-between items-start mb-5">
-        <h3 className="text-lg font-black text-foreground italic">Daily Entry</h3>
+        <h3 className="text-lg font-black text-foreground italic tracking-tight">Daily Entry</h3>
         <div className="text-right">
-          <span className={`text-xs font-black px-3 py-1 rounded-full ${liveTotal < 0 ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}>
+          <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl shadow-inner ${liveTotal < 0 ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}>
             ₹ {liveTotal.toLocaleString()}
           </span>
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="block mt-2 text-[10px] font-bold text-muted-foreground bg-secondary p-1.5 rounded-lg outline-none border border-border"
+            className="block mt-2 text-[10px] font-bold text-muted-foreground bg-secondary/50 p-1.5 rounded-lg outline-none border border-border"
           />
         </div>
       </div>
 
       <div className="space-y-4">
         {cards.map((card) => (
-          <div key={card.id} className="bg-card p-3 rounded-2xl border border-border relative animate-fade-in shadow-sm">
-            {/* Category Tags */}
-            <div className="flex flex-wrap gap-1.5 mb-2">
+          <div key={card.id} className="bg-card/50 backdrop-blur-sm p-3 rounded-3xl border border-border relative animate-fade-in shadow-sm">
+            
+            {/* CATEGORY BUTTONS - Now Auto-Fitting in One Line */}
+            <div className="flex flex-row gap-1 mb-3 w-full overflow-hidden">
               {CATEGORIES.map(cat => (
                 <button
                   key={cat}
                   onClick={() => selectCategory(card.id, cat)}
-                  className={`text-[7px] font-black uppercase rounded-lg border w-[52px] h-6 flex items-center justify-center transition-all active:scale-90 ${
+                  className={`flex-1 min-w-0 h-7 text-[7px] font-black uppercase rounded-lg border transition-all active:scale-95 truncate ${
                     card.category === cat
                       ? CATEGORY_COLORS[cat]
                       : "border-border bg-secondary text-muted-foreground"
@@ -221,118 +318,124 @@ export default function ExpenseForm({
 
             {/* Sub Rows */}
             <div className="space-y-2 mt-2">
-              {card.subRows.map((row, idx) => (
-                <div
-                  key={row.id}
-                  className={`${SUB_ROW_COLORS[idx % SUB_ROW_COLORS.length]} p-3 rounded-2xl border border-border/50 animate-fade-in`}
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-3 bg-primary rounded-full" />
-                      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">
-                        {card.category ? `${card.category} ${idx + 1}` : `Expense ${idx + 1}`}
-                      </span>
-                    </div>
-                    {card.subRows.length > 1 && (
-                      <button onClick={() => removeSubRow(card.id, row.id)} className="w-6 h-6 flex items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all">
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
+  {card.subRows.map((row, idx) => (
+    <div
+      key={row.id}
+      className={`${SUB_ROW_COLORS[idx % SUB_ROW_COLORS.length]} p-3 rounded-2xl border border-border/30 animate-fade-in shadow-sm`}
+    >
+      {/* Header Row */}
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-3 bg-primary/40 rounded-full" />
+          <span className="text-[9px] font-black text-muted-foreground/70 uppercase tracking-widest">
+            {card.category ? `${card.category} #${idx + 1}` : `Expense #${idx + 1}`}
+          </span>
+        </div>
+        {card.subRows.length > 1 && (
+          <button onClick={() => removeSubRow(card.id, row.id)} className="w-6 h-6 flex items-center justify-center rounded-full bg-destructive/10 text-destructive active:scale-75 transition-all">
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
 
-                  <div className="bg-card/80 backdrop-blur-sm p-3 rounded-xl border border-card shadow-inner mb-2">
-                    <div className="flex items-center gap-3">
-                      <textarea
-                        placeholder="Detail (Stop, Tea, Bill etc.)"
-                        rows={1}
-                        value={row.description}
-                        onChange={e => { updateSubRow(card.id, row.id, "description", e.target.value); e.target.style.height = ""; e.target.style.height = e.target.scrollHeight + "px"; }}
-                        className="flex-grow w-full text-[11px] border-none outline-none bg-transparent font-bold text-foreground h-6 leading-tight resize-none overflow-hidden placeholder:text-muted-foreground/50"
-                      />
-                      <div className="w-24 flex-shrink-0 flex items-center bg-primary/5 px-2 py-1.5 rounded-lg border border-primary/20">
-                        <span className="text-[10px] font-black text-primary/60 mr-1">₹</span>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={row.amount}
-                          onChange={e => updateSubRow(card.id, row.id, "amount", e.target.value)}
-                          className="w-full bg-transparent font-black text-[12px] outline-none text-right text-primary"
-                        />
-                      </div>
-                    </div>
-                  </div>
+      {/* Input Section */}
+      <div className="bg-white/60 backdrop-blur-md p-3 rounded-xl border border-white shadow-inner mb-2 flex items-center gap-2">
+        <textarea
+          placeholder="Detail (e.g. Lunch at Highway)"
+          rows={1}
+          value={row.description}
+          onChange={e => { updateSubRow(card.id, row.id, "description", e.target.value); e.target.style.height = ""; e.target.style.height = e.target.scrollHeight + "px"; }}
+          className="flex-grow bg-transparent text-[11px] font-bold text-foreground outline-none resize-none leading-tight"
+        />
+        <div className="w-20 flex-shrink-0 flex items-center bg-white rounded-lg border border-primary/10 px-2 py-1">
+          <span className="text-[10px] font-black text-primary/40 mr-1">₹</span>
+          <input
+            type="number"
+            placeholder="0"
+            value={row.amount}
+            onChange={e => updateSubRow(card.id, row.id, "amount", e.target.value)}
+            className="w-full bg-transparent font-black text-[12px] text-right text-primary outline-none"
+          />
+        </div>
+      </div>
 
-                  {/* Image Actions */}
-                  <div className="flex items-center justify-between px-1">
-                    <div className="flex gap-1.5 items-center">
-                      <label className="w-7 h-7 bg-card border border-border rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition-colors relative overflow-hidden shadow-sm">
-                        {row.imagePreview ? (
-                          <img src={row.imagePreview} className="absolute inset-0 w-full h-full object-cover" />
-                        ) : (
-                          <Camera className="w-3 h-3 text-muted-foreground" />
-                        )}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={e => e.target.files?.[0] && handleImageSelect(card.id, row.id, e.target.files[0])}
-                        />
-                      </label>
-                      {row.imagePreview && (
-                        <button
-                          onClick={() => setPreviewImage(row.imagePreview)}
-                          className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-md"
-                        >
-                          <Eye className="w-3 h-3" />
-                        </button>
-                      )}
-                      {row.imagePreview && !row.uploadedUrl && (
-                        <button
-                          onClick={() => uploadImage(card.id, row.id)}
-                          disabled={row.uploading}
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm transition-all ${
-                            row.uploading ? "bg-warning text-warning-foreground" : "bg-blue-400 text-primary-foreground"
-                          }`}
-                        >
-                          {row.uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudUpload className="w-3 h-3" />}
-                        </button>
-                      )}
-                      {row.uploadedUrl && (
-                        <div className="w-7 h-7 rounded-lg bg-success text-success-foreground flex items-center justify-center">✓</div>
-                      )}
-                    </div>
-                    <span className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-tighter italic">Verify Receipt</span>
-                  </div>
+      {/* Image Actions (Auto-Upload Version) */}
+      <div className="flex items-center justify-between px-1 mt-3">
+        <div className="flex gap-2 items-center">
+          {/* Main Camera/Preview Button */}
+          <label className={`w-8 h-8 border rounded-xl flex items-center justify-center cursor-pointer active:scale-90 transition-all relative overflow-hidden shadow-sm ${row.uploading ? 'bg-secondary' : 'bg-white'}`}>
+            {row.imagePreview ? (
+              <img src={row.imagePreview} className={`absolute inset-0 w-full h-full object-cover ${row.uploading ? 'opacity-40' : 'opacity-100'}`} />
+            ) : (
+              <Camera className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+            
+            {/* Uploading Spinner Overlay */}
+            {row.uploading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+              </div>
+            )}
+            
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={row.uploading}
+              onChange={e => e.target.files?.[0] && handleImageSelect(card.id, row.id, e.target.files[0])}
+            />
+          </label>
+
+          {/* Action Buttons */}
+          {row.imagePreview && !row.uploading && (
+            <div className="flex gap-1.5 animate-in fade-in zoom-in duration-200">
+              {/* Full Preview Button */}
+              <button onClick={() => setPreviewImage(row.imagePreview)} className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90">
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Upload Success Indicator */}
+              {row.uploadedUrl && (
+                <div className="w-8 h-8 rounded-xl bg-success/20 text-success flex items-center justify-center border border-success/30">
+                  <Check className="w-3.5 h-3.5" />
                 </div>
-              ))}
+              )}
             </div>
+          )}
+        </div>
 
-            <button
-              onClick={() => addSubRow(card.id)}
-              className="w-full py-1.5 border border-dashed border-border rounded-lg text-primary text-[8px] font-black uppercase tracking-wider mt-2 hover:bg-primary/5 transition-all"
-            >
-              + Add More Details
+        {/* Status Tag */}
+        <div className="flex flex-col items-end">
+          <span className="text-[7px] font-black text-muted-foreground/30 uppercase italic">Digital Receipt</span>
+          {row.uploading && <span className="text-[6px] font-bold text-primary animate-pulse uppercase">Uploading...</span>}
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
+            <button onClick={() => addSubRow(card.id)} className="w-full mt-3 py-2 border border-dashed border-primary/20 rounded-xl text-primary text-[8px] font-black uppercase hover:bg-primary/5 transition-all active:scale-95">
+              + New Sub-Item
             </button>
 
-            <div className="flex justify-end pt-1 border-t border-border/50 mt-2">
-              <button onClick={() => removeCard(card.id)} className="text-muted-foreground hover:text-destructive p-1 transition-colors">
-                <X className="w-3 h-3" />
+            <div className="flex justify-end pt-2 border-t border-border/30 mt-3">
+              <button onClick={() => removeCard(card.id)} className="text-muted-foreground/40 hover:text-destructive transition-colors">
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      <button onClick={addCard} className="w-full mt-4 py-3 border-2 border-dashed border-primary/30 rounded-2xl text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 transition-all">
-        + Add Item
+      <button onClick={addCard} className="w-full mt-5 py-4 border-2 border-dashed border-primary/20 rounded-[2rem] text-primary text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">
+        + Add Category Card
       </button>
 
       <button
         onClick={handleSave}
         disabled={saving}
-        className="w-full mt-4 bg-primary text-primary-foreground py-4 rounded-2xl font-black shadow-xl uppercase text-[10px] tracking-widest active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        className="w-full mt-4 bg-primary text-primary-foreground py-4.5 rounded-[2rem] font-black shadow-2xl uppercase text-[11px] tracking-[0.2em] active:scale-[0.97] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
       >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save & Sync"}
+        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save to Cloud"}
       </button>
 
       <ImagePreviewModal imageUrl={previewImage} onClose={() => setPreviewImage(null)} />
