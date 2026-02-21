@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, Camera, Eye, CloudUpload, Loader2, Save, Image } from "lucide-react";
+import { ChevronDown, ChevronRight, Camera, Eye, Loader2, Save, X } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ImagePreviewModal from "./ImagePreviewModal";
 
@@ -50,6 +50,7 @@ interface Props {
 export default function JourneyLogbook({ userId, refreshKey }: Props) {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expandedMissions, setExpandedMissions] = useState<Set<string>>(new Set());
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<string | null>(null);
@@ -82,6 +83,14 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
       grouped[e.date].push(e);
     });
     return Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a));
+  };
+
+  const toggleMission = (missionId: string) => {
+    setExpandedMissions(prev => {
+      const next = new Set(prev);
+      next.has(missionId) ? next.delete(missionId) : next.add(missionId);
+      return next;
+    });
   };
 
   const toggleDate = (key: string) => {
@@ -137,7 +146,106 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
     setUploadingId(null);
   };
 
-  const renderMissionBlock = (mission: Mission, editable: boolean) => {
+  const renderExpenseEntry = (entry: Expense, editable: boolean) => (
+    <div key={entry.id} className="bg-secondary/30 rounded-xl p-3 animate-fade-in border border-border/50">
+      {editingRow === entry.id && editable ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`w-2 h-2 rounded-full ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
+            <span className="text-[9px] font-black text-muted-foreground uppercase">{entry.category}</span>
+          </div>
+          <input
+            value={editValues.description}
+            onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+            className="w-full text-[11px] font-bold bg-card p-2 rounded-lg border border-border outline-none focus:border-primary text-foreground"
+            placeholder="Description"
+          />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center bg-card px-2 py-1.5 rounded-lg border border-border">
+              <span className="text-[10px] font-black text-primary/60 mr-1">₹</span>
+              <input
+                type="number"
+                value={editValues.amount}
+                onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
+                className="w-full bg-transparent font-black text-[11px] outline-none text-right text-primary"
+              />
+            </div>
+            <button
+              onClick={() => saveEdit(entry.id)}
+              disabled={savingId === entry.id}
+              className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[9px] font-black uppercase flex items-center gap-1"
+            >
+              {savingId === entry.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              Save
+            </button>
+            <button onClick={() => setEditingRow(null)} className="h-8 px-2 rounded-lg bg-secondary text-muted-foreground text-[9px] font-black">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
+              <span className="text-[9px] font-black text-muted-foreground uppercase flex-shrink-0">{entry.category}</span>
+              <span className="text-[10px] font-bold text-foreground truncate">{entry.description}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[entry.status] || ""}`}>
+                {entry.status}
+              </span>
+              <span className={`text-[11px] font-black ${entry.category === "cash" ? "text-success" : "text-destructive"}`}>
+                {entry.category === "cash" ? "+" : "-"}₹{Number(entry.amount).toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {entry.rejected_reason && (
+            <p className="text-[8px] text-destructive mt-1 pl-4 italic">Reason: {entry.rejected_reason}</p>
+          )}
+
+          <div className="flex items-center gap-2 mt-2 pl-4">
+            {entry.image_url && (
+              <>
+                <button onClick={() => setPreviewImage(entry.image_url)} className="w-7 h-7 rounded-lg overflow-hidden border border-border relative">
+                  <img src={entry.image_url} className="w-full h-full object-cover" alt="" />
+                </button>
+                <button onClick={() => setPreviewImage(entry.image_url)} className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                  <Eye className="w-3 h-3" />
+                </button>
+              </>
+            )}
+
+            {editable && !entry.image_url && (
+              <label className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                {uploadingId === entry.id ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                ) : (
+                  <Camera className="w-3 h-3 text-muted-foreground" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => e.target.files?.[0] && handleImageUpload(entry.id, e.target.files[0])}
+                />
+              </label>
+            )}
+
+            {editable && entry.status === "pending" && (
+              <button onClick={() => startEdit(entry)} className="text-[8px] font-black text-primary underline ml-auto">
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Active missions: show dates expanded inline (no mission-level accordion needed)
+  const renderActiveMission = (mission: Mission) => {
     const missionExpenses = getExpensesForMission(mission.id);
     const dateGroups = groupByDate(missionExpenses);
     const missionTotal = missionExpenses.filter(e => e.category !== "cash").reduce((s, e) => s + Number(e.amount), 0);
@@ -145,7 +253,6 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
 
     return (
       <div key={mission.id} className="bg-card rounded-2xl border border-border overflow-hidden animate-fade-in mb-3">
-        {/* Mission Header */}
         <div className="p-4 bg-primary/5 border-b border-border">
           <div className="flex justify-between items-center">
             <div>
@@ -160,18 +267,11 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
             </div>
           </div>
           <div className="flex gap-1.5 mt-2">
-            <span className="text-[8px] bg-secondary px-2 py-0.5 rounded-full font-black text-muted-foreground">
-              {missionExpenses.length} entries
-            </span>
-            <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
-              editable ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-            }`}>
-              {mission.status}
-            </span>
+            <span className="text-[8px] bg-secondary px-2 py-0.5 rounded-full font-black text-muted-foreground">{missionExpenses.length} entries</span>
+            <span className="text-[8px] px-2 py-0.5 rounded-full font-black uppercase bg-success/15 text-success">{mission.status}</span>
           </div>
         </div>
 
-        {/* Date Groups */}
         <div className="divide-y divide-border">
           {dateGroups.length === 0 && (
             <p className="text-center text-muted-foreground text-[10px] italic py-6">No entries yet</p>
@@ -183,142 +283,114 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
 
             return (
               <div key={dateKey}>
-                <button
-                  onClick={() => toggleDate(dateKey)}
-                  className="w-full px-4 py-3 flex justify-between items-center hover:bg-secondary/30 transition-colors"
-                >
+                <button onClick={() => toggleDate(dateKey)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-secondary/30 transition-colors">
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] font-black text-primary uppercase tracking-tighter">{date}</span>
-                    <span className="text-[8px] bg-secondary px-1.5 py-0.5 rounded-full font-bold text-muted-foreground">
-                      {entries.length}
-                    </span>
+                    <span className="text-[8px] bg-secondary px-1.5 py-0.5 rounded-full font-bold text-muted-foreground">{entries.length}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-black text-foreground">₹{dayTotal.toLocaleString()}</span>
                     <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </div>
                 </button>
-
                 {isOpen && (
                   <div className="px-3 pb-3 space-y-2">
-                    {entries.map(entry => (
-                      <div key={entry.id} className="bg-secondary/30 rounded-xl p-3 animate-fade-in border border-border/50">
-                        {editingRow === entry.id && editable ? (
-                          /* Editing Mode */
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className={`w-2 h-2 rounded-full ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
-                              <span className="text-[9px] font-black text-muted-foreground uppercase">{entry.category}</span>
-                            </div>
-                            <input
-                              value={editValues.description}
-                              onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
-                              className="w-full text-[11px] font-bold bg-card p-2 rounded-lg border border-border outline-none focus:border-primary text-foreground"
-                              placeholder="Description"
-                            />
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 flex items-center bg-card px-2 py-1.5 rounded-lg border border-border">
-                                <span className="text-[10px] font-black text-primary/60 mr-1">₹</span>
-                                <input
-                                  type="number"
-                                  value={editValues.amount}
-                                  onChange={e => setEditValues(v => ({ ...v, amount: e.target.value }))}
-                                  className="w-full bg-transparent font-black text-[11px] outline-none text-right text-primary"
-                                />
-                              </div>
-                              <button
-                                onClick={() => saveEdit(entry.id)}
-                                disabled={savingId === entry.id}
-                                className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[9px] font-black uppercase flex items-center gap-1"
-                              >
-                                {savingId === entry.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingRow(null)}
-                                className="h-8 px-2 rounded-lg bg-secondary text-muted-foreground text-[9px] font-black"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          /* View Mode */
-                          <div>
-                            <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-muted-foreground"}`} />
-                                <span className="text-[9px] font-black text-muted-foreground uppercase flex-shrink-0">{entry.category}</span>
-                                <span className="text-[10px] font-bold text-foreground truncate">{entry.description}</span>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                                <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[entry.status] || ""}`}>
-                                  {entry.status}
-                                </span>
-                                <span className={`text-[11px] font-black ${entry.category === "cash" ? "text-success" : "text-destructive"}`}>
-                                  {entry.category === "cash" ? "+" : "-"}₹{Number(entry.amount).toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-
-                            {entry.rejected_reason && (
-                              <p className="text-[8px] text-destructive mt-1 pl-4 italic">Reason: {entry.rejected_reason}</p>
-                            )}
-
-                            {/* Image & Actions Row */}
-                            <div className="flex items-center gap-2 mt-2 pl-4">
-                              {entry.image_url && (
-                                <>
-                                  <button
-                                    onClick={() => setPreviewImage(entry.image_url)}
-                                    className="w-7 h-7 rounded-lg overflow-hidden border border-border relative"
-                                  >
-                                    <img src={entry.image_url} className="w-full h-full object-cover" alt="" />
-                                  </button>
-                                  <button
-                                    onClick={() => setPreviewImage(entry.image_url)}
-                                    className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                  </button>
-                                </>
-                              )}
-
-                              {editable && !entry.image_url && (
-                                <label className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                                  {uploadingId === entry.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                  ) : (
-                                    <Camera className="w-3 h-3 text-muted-foreground" />
-                                  )}
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={e => e.target.files?.[0] && handleImageUpload(entry.id, e.target.files[0])}
-                                  />
-                                </label>
-                              )}
-
-                              {editable && entry.status === "pending" && (
-                                <button
-                                  onClick={() => startEdit(entry)}
-                                  className="text-[8px] font-black text-primary underline ml-auto"
-                                >
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {entries.map(entry => renderExpenseEntry(entry, true))}
                   </div>
                 )}
               </div>
             );
           })}
         </div>
+      </div>
+    );
+  };
+
+  // Old missions: Level 1 = mission accordion, Level 2 = date accordion, Level 3 = entries
+  const renderOldMission = (mission: Mission) => {
+    const missionExpenses = getExpensesForMission(mission.id);
+    const dateGroups = groupByDate(missionExpenses);
+    const missionTotal = missionExpenses.filter(e => e.category !== "cash").reduce((s, e) => s + Number(e.amount), 0);
+    const cashTotal = missionExpenses.filter(e => e.category === "cash").reduce((s, e) => s + Number(e.amount), 0);
+    const isMissionOpen = expandedMissions.has(mission.id);
+
+    return (
+      <div key={mission.id} className="bg-card rounded-2xl border border-border overflow-hidden animate-fade-in mb-3">
+        {/* Level 1: Mission Header (clickable) */}
+        <button
+          onClick={() => toggleMission(mission.id)}
+          className="w-full p-4 bg-muted/30 border-b border-border text-left hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              {isMissionOpen ? (
+                <ChevronDown className="w-4 h-4 text-primary" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              )}
+              <div>
+                <h4 className="text-xs font-black text-foreground uppercase tracking-tight">{mission.name}</h4>
+                <p className="text-[9px] text-muted-foreground font-bold mt-0.5">
+                  {mission.start_date}{mission.end_date ? ` → ${mission.end_date}` : ""}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-black text-destructive">₹{missionTotal.toLocaleString()}</p>
+              {cashTotal > 0 && <p className="text-[9px] font-bold text-success">+₹{cashTotal.toLocaleString()}</p>}
+              <span className="text-[8px] bg-secondary px-2 py-0.5 rounded-full font-black text-muted-foreground">{missionExpenses.length} entries</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Level 2: Date list (shown when mission expanded) */}
+        {isMissionOpen && (
+          <div className="divide-y divide-border">
+            {dateGroups.length === 0 && (
+              <p className="text-center text-muted-foreground text-[10px] italic py-6">No entries in this mission</p>
+            )}
+            {dateGroups.map(([date, entries]) => {
+              const dateKey = `old_${mission.id}_${date}`;
+              const isDateOpen = expandedDates.has(dateKey);
+              const dayTotal = entries.filter(e => e.category !== "cash").reduce((s, e) => s + Number(e.amount), 0);
+              const dayCash = entries.filter(e => e.category === "cash").reduce((s, e) => s + Number(e.amount), 0);
+
+              return (
+                <div key={dateKey}>
+                  <button
+                    onClick={() => toggleDate(dateKey)}
+                    className="w-full px-5 py-3 flex justify-between items-center hover:bg-secondary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {isDateOpen ? (
+                        <ChevronDown className="w-3 h-3 text-primary" />
+                      ) : (
+                        <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                      )}
+                      <span className="text-[9px] font-black text-primary uppercase tracking-tighter">
+                        {new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                      </span>
+                      <span className="text-[8px] bg-secondary px-1.5 py-0.5 rounded-full font-bold text-muted-foreground">
+                        {entries.length} entries
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-foreground">₹{dayTotal.toLocaleString()}</span>
+                      {dayCash > 0 && <span className="text-[9px] font-bold text-success">+₹{dayCash.toLocaleString()}</span>}
+                    </div>
+                  </button>
+
+                  {/* Level 3: Expense entries (shown when date expanded) */}
+                  {isDateOpen && (
+                    <div className="px-4 pb-3 space-y-2">
+                      {entries.map(entry => renderExpenseEntry(entry, false))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -360,7 +432,7 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
           {activeMissions.length === 0 ? (
             <p className="text-center text-muted-foreground text-[10px] italic py-6">No active missions</p>
           ) : (
-            activeMissions.map(m => renderMissionBlock(m, true))
+            activeMissions.map(m => renderActiveMission(m))
           )}
         </TabsContent>
 
@@ -368,7 +440,7 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
           {oldMissions.length === 0 ? (
             <p className="text-center text-muted-foreground text-[10px] italic py-6">No completed missions</p>
           ) : (
-            oldMissions.map(m => renderMissionBlock(m, false))
+            oldMissions.map(m => renderOldMission(m))
           )}
         </TabsContent>
       </Tabs>
