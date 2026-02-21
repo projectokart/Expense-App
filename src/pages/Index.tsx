@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import ExpenseForm from "@/components/expense/ExpenseForm";
 import ExpenseSummaryCard from "@/components/expense/ExpenseSummaryCard";
 import MissionPanel from "@/components/expense/MissionPanel";
-import ExpenseTimeline from "@/components/expense/ExpenseTimeline";
+import JourneyLogbook from "@/components/expense/JourneyLogbook";
 import { LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -124,7 +124,7 @@ export default function UserDashboard() {
           />
         )}
 
-        <ExpenseTimeline expenses={expenses} />
+        <JourneyLogbook userId={user?.id || ""} refreshKey={refreshKey} />
       </div>
     </div>
   );
