@@ -418,7 +418,7 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
             <div>
               <h4 className="text-xs font-black text-foreground uppercase tracking-tight">{mission.name}</h4>
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">
-                {mission.start_date}{mission.end_date ? ` → ${mission.end_date}` : " → Ongoing"}
+                {new Date(mission.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}{mission.end_date ? ` → ${new Date(mission.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : " → Ongoing"}
               </p>
             </div>
             <div className="text-right">
@@ -445,7 +445,7 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
               <div key={dateKey}>
                 <button onClick={() => toggleDate(dateKey)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-secondary/30 transition-colors">
                   <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-black text-primary uppercase tracking-tighter">{date}</span>
+                    <span className="text-[9px] font-black text-primary uppercase tracking-tighter">{new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
                     <span className="text-[8px] bg-secondary px-1.5 py-0.5 rounded-full font-bold text-muted-foreground">{entries.length}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -491,7 +491,7 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
               <div>
                 <h4 className="text-xs font-black text-foreground uppercase tracking-tight">{mission.name}</h4>
                 <p className="text-[9px] text-muted-foreground font-bold mt-0.5">
-                  {mission.start_date}{mission.end_date ? ` → ${mission.end_date}` : ""}
+                  {new Date(mission.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}{mission.end_date ? ` → ${new Date(mission.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
                 </p>
               </div>
             </div>

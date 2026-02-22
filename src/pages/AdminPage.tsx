@@ -130,7 +130,7 @@ const loadData = async () => {
       supabase.from("expenses").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select(`*, user_roles (role)`),
       supabase.from("category_limits").select("*"),
-      supabase.from("settlements" as any).select("*"),
+      supabase.from("settlements").select("*"),
       supabase.from("missions").select("*")
     ]);
 
@@ -274,7 +274,7 @@ const deleteExpense = async (id: string) => {
 
   setLoading(true);
   try {
-    const { error } = await supabase.from("settlements" as any).insert({
+    const { error } = await supabase.from("settlements").insert({
       user_id: selectedUser,
       mission_id: settleData.missionId === "all" ? null : settleData.missionId,
       amount: settleData.amount,
@@ -829,7 +829,7 @@ const uniqueMissionsReport = useMemo(() => {
                 <p className="text-[8px] font-black text-primary uppercase tracking-wider">
                   {userName}
                 </p>
-                <span className="text-[7px] font-bold text-gray-300">• {e.date}</span>
+                <span className="text-[7px] font-bold text-gray-300">• {new Date(e.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
               </div>
               <h4 className="text-[11px] font-bold text-gray-800 line-clamp-1 leading-tight">
                 {e.description || "No Description"}
@@ -1349,19 +1349,36 @@ const uniqueMissionsReport = useMemo(() => {
     
     {/* 📈 1. DYNAMIC ANALYTICS CARDS */}
     {(() => {
-      // ✅ Filtering based on names (Matching your Expenses Tab logic)
-      const filtered = expenses.filter(e => {
-        const userName = e.profiles?.name || e.user_name || "Unknown User";
-        const mName = e.mission_name || "General";
+      // Filter expenses based on report filters
+      const reportFiltered = expenses.filter(e => {
+        const userName = e.profiles?.name || "Unknown User";
+        const mName = e.missions?.name || "General";
         
         return (filters.category === 'all' || e.category === filters.category) &&
                (filters.status === 'all' || e.status === filters.status) &&
-               (filters.userId === 'all' || userName === filters.userId) && // Filtering by Name
-               (filters.missionId === 'all' || mName === filters.missionId); // Filtering by Name
+               (filters.userId === 'all' || userName === filters.userId) &&
+               (filters.missionId === 'all' || mName === filters.missionId);
       });
 
-      const totalExp = filtered.reduce((s, e) => s + Number(e.amount), 0);
-      const approvedExp = filtered.filter(e => e.status === 'approved').reduce((s, e) => s + Number(e.amount), 0);
+      // Exclude cash from expense totals
+      const totalExp = reportFiltered
+        .filter(e => e.category !== 'cash')
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const approvedExp = reportFiltered
+        .filter(e => e.status === 'approved' && e.category !== 'cash')
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const pendingExp = reportFiltered
+        .filter(e => e.status === 'pending' && e.category !== 'cash')
+        .reduce((s, e) => s + Number(e.amount), 0);
+
+      // Settlement (received) amount - filtered by user if selected
+      const filteredSettlements = settlements.filter(s => {
+        if (filters.userId === 'all') return true;
+        const settUser = users.find(u => u.id === s.user_id);
+        return settUser?.name === filters.userId;
+      });
+      const totalReceived = filteredSettlements.reduce((s, c) => s + Number(c.amount), 0);
+      const netBalance = totalReceived - approvedExp;
 
       return (
         <div className="space-y-4">
@@ -1370,25 +1387,30 @@ const uniqueMissionsReport = useMemo(() => {
                 <div className="flex justify-between items-start mb-6">
                    <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400 opacity-80">Financial Summary</p>
-                      <h2 className="text-4xl font-black italic tracking-tighter mt-1">₹{totalExp.toLocaleString()}</h2>
+                      <h2 className="text-4xl font-black italic tracking-tighter mt-1">₹{approvedExp.toLocaleString()}</h2>
+                      <p className="text-[8px] font-bold text-white/40 uppercase mt-1">Approved Expenses (excl. Cash)</p>
                    </div>
                    <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md">
                       <BarChart3 className="w-5 h-5 text-emerald-400" />
                    </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-2 border-t border-white/10 pt-5">
+                <div className="grid grid-cols-4 gap-2 border-t border-white/10 pt-5">
                    <div>
-                      <p className="text-[7px] font-black uppercase opacity-40 mb-1">Approved</p>
-                      <p className="text-[11px] font-bold text-emerald-400">₹{approvedExp.toLocaleString()}</p>
+                      <p className="text-[7px] font-black uppercase opacity-40 mb-1">Received</p>
+                      <p className="text-[11px] font-bold text-emerald-400">₹{totalReceived.toLocaleString()}</p>
                    </div>
                    <div>
                       <p className="text-[7px] font-black uppercase opacity-40 mb-1">Pending</p>
-                      <p className="text-[11px] font-bold text-orange-400">₹{(totalExp - approvedExp).toLocaleString()}</p>
+                      <p className="text-[11px] font-bold text-orange-400">₹{pendingExp.toLocaleString()}</p>
+                   </div>
+                   <div>
+                      <p className="text-[7px] font-black uppercase opacity-40 mb-1">Balance</p>
+                      <p className={`text-[11px] font-bold ${netBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>₹{netBalance.toLocaleString()}</p>
                    </div>
                    <div>
                       <p className="text-[7px] font-black uppercase opacity-40 mb-1">Records</p>
-                      <p className="text-[11px] font-bold">{filtered.length} Items</p>
+                      <p className="text-[11px] font-bold">{reportFiltered.length}</p>
                    </div>
                 </div>
              </div>

@@ -49,18 +49,13 @@ export default function UserDashboard() {
       .order("created_at", { ascending: false })
       .then(({ data }) => setExpenses(data || []));
 
-    // 3. Fetch settlements (With settled_by -> profiles mapping)
+    // 3. Fetch settlements
     supabase
       .from("settlements")
-      .select(`
-        *,
-        admin:profiles!settlements_settled_by_fkey (
-          name
-        )
-      `)
+      .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .then(({ data }: any) => setSettlements(data || []));
+      .then(({ data }) => setSettlements(data || []));
 
     // 4. Fetch limits
     supabase
@@ -191,7 +186,7 @@ export default function UserDashboard() {
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start">
                       <p className="font-black italic text-sm text-foreground">₹{Number(s.amount).toLocaleString()}</p>
-                      <p className="text-[8px] font-bold opacity-40 uppercase">{new Date(s.created_at).toLocaleDateString('en-GB')}</p>
+                      <p className="text-[8px] font-bold opacity-40 uppercase">{new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</p>
                     </div>
                     
                     <div className="flex flex-col">

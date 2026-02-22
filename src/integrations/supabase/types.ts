@@ -40,6 +40,7 @@ export type Database = {
       }
       expenses: {
         Row: {
+          admin_note: string | null
           amount: number
           approved_at: string | null
           approved_by: string | null
@@ -58,6 +59,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          admin_note?: string | null
           amount?: number
           approved_at?: string | null
           approved_by?: string | null
@@ -76,6 +78,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          admin_note?: string | null
           amount?: number
           approved_at?: string | null
           approved_by?: string | null
@@ -99,6 +102,20 @@ export type Database = {
             columns: ["mission_id"]
             isOneToOne: false
             referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_expenses_missions"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_expenses_profiles"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -172,6 +189,60 @@ export type Database = {
         }
         Relationships: []
       }
+      settlements: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          mission_id: string | null
+          note: string | null
+          proof_url: string | null
+          settled_by: string | null
+          status: string | null
+          user_acknowledged: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          id?: string
+          mission_id?: string | null
+          note?: string | null
+          proof_url?: string | null
+          settled_by?: string | null
+          status?: string | null
+          user_acknowledged?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          mission_id?: string | null
+          note?: string | null
+          proof_url?: string | null
+          settled_by?: string | null
+          status?: string | null
+          user_acknowledged?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_settled_by_fkey"
+            columns: ["settled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -188,7 +259,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_profiles"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

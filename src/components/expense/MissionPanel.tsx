@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MapPin, Loader2 } from "lucide-react";
@@ -13,6 +13,31 @@ export default function MissionPanel({ activeMission, userId, onMissionChange }:
   const [missionName, setMissionName] = useState("");
   const [starting, setStarting] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [missionStats, setMissionStats] = useState({ expense: 0, received: 0 });
+
+  useEffect(() => {
+    if (!activeMission || !userId) {
+      setMissionStats({ expense: 0, received: 0 });
+      return;
+    }
+
+    const fetchStats = async () => {
+      const [expRes, setRes] = await Promise.all([
+        supabase.from("expenses").select("amount, category, status")
+          .eq("mission_id", activeMission.id).eq("user_id", userId),
+        supabase.from("settlements").select("amount")
+          .eq("mission_id", activeMission.id).eq("user_id", userId),
+      ]);
+
+      const expense = (expRes.data || [])
+        .filter(e => e.category !== "cash" && e.status === "approved")
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const received = (setRes.data || []).reduce((s, e) => s + Number(e.amount), 0);
+      setMissionStats({ expense, received });
+    };
+
+    fetchStats();
+  }, [activeMission, userId]);
 
   const startMission = async () => {
     if (!missionName.trim()) {
@@ -50,7 +75,12 @@ export default function MissionPanel({ activeMission, userId, onMissionChange }:
     setFinishing(false);
   };
 
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  };
+
   if (activeMission) {
+    const balance = missionStats.received - missionStats.expense;
     return (
       <div className="bg-primary-foreground/10 p-4 rounded-2xl backdrop-blur-md border border-primary-foreground/20">
         <p className="text-primary-foreground/60 text-[10px] italic uppercase tracking-widest">Active Mission</p>
@@ -58,8 +88,27 @@ export default function MissionPanel({ activeMission, userId, onMissionChange }:
           {activeMission.name}
         </h2>
         <p className="text-[10px] text-primary-foreground/60 font-bold mt-1">
-          Started: {new Date(activeMission.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+          Started: {formatDate(activeMission.start_date)}
         </p>
+
+        {/* Live Mission Summary */}
+        <div className="flex gap-4 mt-3 pt-2 border-t border-primary-foreground/10">
+          <div className="flex flex-col">
+            <span className="text-[7px] text-primary-foreground/40 font-black uppercase">Expense</span>
+            <span className="text-[11px] font-black text-primary-foreground">₹{missionStats.expense.toLocaleString()}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[7px] text-primary-foreground/40 font-black uppercase">Received</span>
+            <span className="text-[11px] font-black text-primary-foreground">₹{missionStats.received.toLocaleString()}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[7px] text-primary-foreground/40 font-black uppercase">Balance</span>
+            <span className={`text-[11px] font-black ${balance >= 0 ? 'text-success' : 'text-destructive'}`}>
+              ₹{balance.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
         <button
           onClick={finishMission}
           disabled={finishing}
