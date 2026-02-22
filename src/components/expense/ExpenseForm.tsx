@@ -69,6 +69,27 @@ export default function ExpenseForm({
     return card.category === "cash" ? total - cardSum : total + cardSum;
   }, 0);
 
+  // Per-category usage: today's existing + current form entries
+  const getCategoryUsage = (category: string) => {
+    const existingTotal = todayExpenses
+      .filter(e => e.category === category)
+      .reduce((s, e) => s + Number(e.amount), 0);
+    const currentTotal = cards
+      .filter(c => c.category === category)
+      .reduce((s, c) => s + c.subRows.reduce((ss, r) => ss + (parseFloat(r.amount) || 0), 0), 0);
+    return { existingTotal, currentTotal, total: existingTotal + currentTotal };
+  };
+
+  const getCategoryLimitStatus = (category: string) => {
+    const limit = categoryLimits[category];
+    if (!limit || limit === 0) return null; // No limit set
+    const { total } = getCategoryUsage(category);
+    const remaining = limit - total;
+    const exceeded = remaining < 0;
+    const pct = Math.min((total / limit) * 100, 100);
+    return { limit, total, remaining, exceeded, pct };
+  };
+
   const addCard = () => {
     setCards([...cards, { id: generateSafeId(), category: "", subRows: [createSubRow()] }]);
   };
@@ -245,11 +266,19 @@ const uploadImage = async (cardId: string, subId: string) => {
     return;
   }
 
-  // 3. Limit Checks (Optional Warning)
+  // 3. Limit Checks - Block if any category exceeds limit
+  const exceededCategories: string[] = [];
   for (const log of allLogs) {
-    if (!checkLimits(log.category, log.amount)) {
-      toast.warning(`${log.category} exceeds daily limit — admin approval needed`);
+    const status = getCategoryLimitStatus(log.category);
+    if (status?.exceeded) {
+      exceededCategories.push(log.category);
     }
+  }
+
+  if (exceededCategories.length > 0) {
+    const uniqueCats = [...new Set(exceededCategories)];
+    toast.error(`Daily limit exceeded for: ${uniqueCats.join(", ").toUpperCase()}. Reduce amounts or contact admin.`);
+    return;
   }
 
   // 4. Final Database Insert
@@ -315,6 +344,39 @@ const uploadImage = async (cardId: string, subId: string) => {
                 </button>
               ))}
             </div>
+
+            {/* Category Limit Warning */}
+            {card.category && (() => {
+              const status = getCategoryLimitStatus(card.category);
+              if (!status) return null;
+              return (
+                <div className={`mb-2 px-3 py-2 rounded-xl border text-[9px] font-bold ${
+                  status.exceeded 
+                    ? "bg-destructive/10 border-destructive/30 text-destructive" 
+                    : status.pct >= 80 
+                      ? "bg-warning/10 border-warning/30 text-warning" 
+                      : "bg-success/10 border-success/30 text-success"
+                }`}>
+                  <div className="flex justify-between items-center">
+                    <span className="uppercase font-black tracking-wider">
+                      {status.exceeded ? "⚠ Limit Exceeded" : status.pct >= 80 ? "⚠ Near Limit" : "✓ Within Limit"}
+                    </span>
+                    <span>₹{status.total.toLocaleString()} / ₹{status.limit.toLocaleString()}</span>
+                  </div>
+                  <div className="mt-1.5 h-1 bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all ${
+                        status.exceeded ? "bg-destructive" : status.pct >= 80 ? "bg-warning" : "bg-success"
+                      }`}
+                      style={{ width: `${Math.min(status.pct, 100)}%` }}
+                    />
+                  </div>
+                  {status.exceeded && (
+                    <p className="mt-1 text-[8px] italic">Reduce amount to submit. Current overage: ₹{Math.abs(status.remaining).toLocaleString()}</p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Sub Rows */}
             <div className="space-y-2 mt-2">
