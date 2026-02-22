@@ -49,13 +49,18 @@ export default function UserDashboard() {
       .order("created_at", { ascending: false })
       .then(({ data }) => setExpenses(data || []));
 
-    // 3. Fetch settlements
+    // 3. Fetch settlements - Added 'as any' to fix TS Errors 2589 & 2769
     supabase
-      .from("settlements")
-      .select("*")
+      .from("settlements" as any)
+      .select(`
+        *,
+        admin:profiles!settlements_settled_by_fkey (
+          name
+        )
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .then(({ data }) => setSettlements(data || []));
+      .then(({ data }: any) => setSettlements(data || []));
 
     // 4. Fetch limits
     supabase
@@ -166,7 +171,6 @@ export default function UserDashboard() {
             <div className="p-2 overflow-y-auto space-y-1 custom-scrollbar">
               {settlements.length > 0 ? settlements.map((s: any) => (
                 <div key={s.id} className="flex items-center gap-3 p-3 rounded-2xl bg-muted/10 border border-border/40 hover:bg-muted/30 transition-all group">
-                  {/* Thumbnail - Calls ImagePreviewModal via setSelectedImage */}
                   {s.proof_url ? (
                     <div 
                       onClick={() => setSelectedImage(s.proof_url)}
@@ -186,11 +190,10 @@ export default function UserDashboard() {
                   <div className="flex-grow min-w-0">
                     <div className="flex justify-between items-start">
                       <p className="font-black italic text-sm text-foreground">₹{Number(s.amount).toLocaleString()}</p>
-                      <p className="text-[8px] font-bold opacity-40 uppercase">{new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</p>
+                      <p className="text-[8px] font-bold opacity-40 uppercase">{new Date(s.created_at).toLocaleDateString('en-GB')}</p>
                     </div>
                     
                     <div className="flex flex-col">
-                      {/* 👤 Yahan map kiya hua Profile Name dikhega */}
                       <p className="text-[9px] font-black text-primary uppercase truncate mt-0.5">
                         Received From: {s.admin?.name || s.received_from || 'Official Admin'}
                       </p>
@@ -222,7 +225,7 @@ export default function UserDashboard() {
         </div>
       )}
 
-      {/* 🖼️ IMAGE PREVIEW MODAL COMPONENT CALL */}
+      {/* 🖼️ IMAGE PREVIEW MODAL */}
       <ImagePreviewModal 
         imageUrl={selectedImage} 
         onClose={() => setSelectedImage(null)} 
