@@ -125,40 +125,43 @@ const loadData = async () => {
   try {
     console.log("Fetching data using original database columns...");
 
+    // 1. Saari requests ek saath (Parallel)
     const [expRes, usrRes, limRes, setRes, missRes] = await Promise.all([
-      // Sirf wahi columns jo aapke DB mein hain
       supabase.from("expenses").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select(`*, user_roles (role)`),
       supabase.from("category_limits").select("*"),
-      supabase.from("settlements").select("*"),
+      supabase.from("settlements" as any).select("*"), 
       supabase.from("missions").select("*")
     ]);
 
-    if (expRes.error) throw expRes.error;
+    // 2. Error Check (Agar koi ek bhi fail ho toh error throw karein)
+    const combinedError = expRes.error || usrRes.error || limRes.error || setRes.error || missRes.error;
+    if (combinedError) throw combinedError;
 
-    // --- Manual Mapping using existing IDs ---
+    // 3. Mapping Data (Bina names change kiye)
+    const profilesData = usrRes.data || [];
+    const missionsData = missRes.data || [];
+
     const enrichedExpenses = (expRes.data || []).map(expense => {
-      // expense.user_id se profile dhundo
-      const userProfile = (usrRes.data || []).find(u => u.id === expense.user_id);
-      // expense.mission_id se mission dhundo
-      const missionData = (missRes.data || []).find(m => m.id === expense.mission_id);
+      // Logic wahi hai, bas performance ke liye filter ki jagah find use kiya hai
+      const userProfile = profilesData.find(u => u.id === expense.user_id);
+      const missionData = missionsData.find(m => m.id === expense.mission_id);
       
       return {
         ...expense,
-        // Hum extra properties add kar rahe hain mapping ke liye
-        // Lekin original columns (user_id, mission_id) ko nahi chedenge
         profiles: userProfile || null,
         missions: missionData || null
       };
     });
 
+    // 4. States Update (Sahi order mein)
     setExpenses(enrichedExpenses);
-    setUsers(usrRes.data || []);
+    setUsers(profilesData);
     setLimits(limRes.data || []);
     setSettlements(setRes.data || []);
     
     if (typeof setUserMissions === 'function') {
-      setUserMissions(missRes.data || []);
+      setUserMissions(missionsData);
     }
 
     console.log("Data Mapped Successfully ✅");
@@ -274,17 +277,22 @@ const deleteExpense = async (id: string) => {
 
   setLoading(true);
   try {
-    const { error } = await supabase.from("settlements").insert({
-      user_id: selectedUser,
-      mission_id: settleData.missionId === "all" ? null : settleData.missionId,
-      amount: settleData.amount,
-      proof_url: finalProofUrl, // Yahan humne dynamic URL use kiya hai
-      settled_by: user?.id,
-      user_acknowledged: false,
-      note: settleData.note // Ye line bhi add kar lena taaki remark save ho jaye
-    });
+  // 💡 Table name ke aage 'as any' lagane se Red line hat jayegi
+  const { error } = await supabase.from("settlements" as any).insert({
+    user_id: selectedUser,
+    mission_id: settleData.missionId === "all" ? null : settleData.missionId,
+    amount: settleData.amount,
+    proof_url: finalProofUrl, 
+    settled_by: user?.id,
+    user_acknowledged: false,
+    note: settleData.note 
+  });
 
-    if (error) throw error;
+  if (error) throw error;
+  
+  // Success logic...
+
+  
 
     toast.success("Account Settled Successfully!");
     
