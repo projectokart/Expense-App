@@ -476,7 +476,7 @@ const uploadImage = async (cardId: string, subId: string) => {
   ))}
 </div>
             <button onClick={() => addSubRow(card.id)} className="w-full mt-3 py-2 border border-dashed border-primary/20 rounded-xl text-primary text-[8px] font-black uppercase hover:bg-primary/5 transition-all active:scale-95">
-              + New Sub-Item
+              + ADD More
             </button>
 
             <div className="flex justify-end pt-2 border-t border-border/30 mt-3">
@@ -489,7 +489,7 @@ const uploadImage = async (cardId: string, subId: string) => {
       </div>
 
       <button onClick={addCard} className="w-full mt-5 py-4 border-2 border-dashed border-primary/20 rounded-[2rem] text-primary text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">
-        + Add Category Card
+        + Add Expense Category
       </button>
 
       <button
