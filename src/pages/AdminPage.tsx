@@ -424,6 +424,12 @@ const approveUser = async (target: any) => {
 };
 
 // Iska naam exportCSV kar do taaki purane buttons kaam karne lagein
+const sanitizeCSVField = (field: string): string => {
+  let clean = String(field || '').replace(/"/g, '""');
+  if (/^[=+\-@\t\r]/.test(clean)) clean = "'" + clean;
+  return clean;
+};
+
 const exportCSV = () => { 
   if (expenses.length === 0) return toast.error("No data to export");
 
@@ -437,12 +443,12 @@ const exportCSV = () => {
 
   if (filteredData.length === 0) return toast.error("No data matches your filters");
 
-  // 2. Formatting (Using XLSX)
+  // 2. Formatting (Using XLSX) - with CSV injection sanitization
   const excelRows = filteredData.map(e => ({
     "Date": e.date,
-    "Employee": e.profiles?.name || "N/A",
+    "Employee": sanitizeCSVField(e.profiles?.name || "N/A"),
     "Category": e.category.toUpperCase(),
-    "Description": e.description || "",
+    "Description": sanitizeCSVField(e.description || ""),
     "Amount (₹)": Number(e.amount),
     "Status": e.status.toUpperCase(),
     "Receipt Image": e.image_url || ""
