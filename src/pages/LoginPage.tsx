@@ -51,6 +51,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+
     try {
       if (isForgotPassword) {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -68,13 +69,19 @@ export default function LoginPage() {
         if (error) throw error;
       }
     } catch (err: any) {
-      toast.error(err.message || "Authentication failed");
+      const message = typeof err?.message === "string" ? err.message : "Authentication failed";
+      if (message.toLowerCase().includes("failed to fetch")) {
+        toast.error("Network issue while signing in. Please check internet/VPN and try again.");
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   return (
-  <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-0 sm:p-4">
+  <div className="min-h-screen bg-background flex flex-col items-center justify-center p-0 sm:p-4">
     {/* Desktop par size control karne ke liye main container */}
     <div className="w-full max-w-[450px] min-h-screen sm:min-h-[850px] bg-background sm:rounded-[3rem] sm:shadow-[0_40px_100px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col relative">
       
