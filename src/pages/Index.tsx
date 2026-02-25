@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { LogOut, Settings, History, X, Image as ImageIcon, Maximize2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
@@ -9,7 +8,8 @@ import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 import ExpenseForm from "@/components/expense/ExpenseForm";
 import ExpenseSummaryCard from "@/components/expense/ExpenseSummaryCard";
 import MissionPanel from "@/components/expense/MissionPanel";
-import JourneyLogbook from "@/components/expense/JourneyLogbook";
+
+const JourneyLogbook = lazy(() => import("@/components/expense/JourneyLogbook"));
 
 export default function UserDashboard() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -135,7 +135,9 @@ export default function UserDashboard() {
             No Active Mission Found
           </div>
         )}
-        <JourneyLogbook userId={user?.id || ""} refreshKey={refreshKey} />
+        <Suspense fallback={<div className="bg-muted/30 border border-border rounded-2xl p-4 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Loading journal...</div>}>
+          <JourneyLogbook userId={user?.id || ""} refreshKey={refreshKey} />
+        </Suspense>
       </div>
 
       {/* 🧾 COMPACT RECEIVING LEDGER MODAL */}
