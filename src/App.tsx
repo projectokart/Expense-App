@@ -8,11 +8,11 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-// Eagerly load the main dashboard — it's the primary post-login page
+// Eagerly load primary pages for instant rendering
 import Index from "./pages/Index";
+import LoginPage from "./pages/LoginPage";
 
 // Lazy load infrequent pages only
-const LoginPage = React.lazy(() => import("./pages/LoginPage"));
 const AdminPage = React.lazy(() => import("./pages/AdminPage"));
 const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
