@@ -26,51 +26,32 @@ export default function UserDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    
-    // 1. Fetch active mission
-    supabase
-      .from("missions")
-      .select("*")
-      .eq("user_id", user.id)
-      .in("status", ["active", "pending"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) setActiveMission(data[0]);
-        else setActiveMission(null);
-      });
 
-    // 2. Fetch expenses
-    supabase
-      .from("expenses")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setExpenses(data || []));
+    const fetchAll = async () => {
+      try {
+        const [missionRes, expenseRes, settlementRes, limitsRes] = await Promise.all([
+          supabase.from("missions").select("*").eq("user_id", user.id)
+            .in("status", ["active", "pending"]).order("created_at", { ascending: false }).limit(1),
+          supabase.from("expenses").select("*").eq("user_id", user.id)
+            .order("date", { ascending: false }).order("created_at", { ascending: false }),
+          supabase.from("settlements" as any).select(`*, admin:profiles!settlements_settled_by_fkey (name)`)
+            .eq("user_id", user.id).order("created_at", { ascending: false }),
+          supabase.from("category_limits").select("category, daily_limit"),
+        ]);
 
-    // 3. Fetch settlements - Added 'as any' to fix TS Errors 2589 & 2769
-    supabase
-      .from("settlements" as any)
-      .select(`
-        *,
-        admin:profiles!settlements_settled_by_fkey (
-          name
-        )
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }: any) => setSettlements(data || []));
+        setActiveMission(missionRes.data?.[0] ?? null);
+        setExpenses(expenseRes.data || []);
+        setSettlements((settlementRes as any).data || []);
 
-    // 4. Fetch limits
-    supabase
-      .from("category_limits")
-      .select("category, daily_limit")
-      .then(({ data }) => {
         const limits: Record<string, number> = {};
-        data?.forEach(l => { limits[l.category] = Number(l.daily_limit); });
+        limitsRes.data?.forEach(l => { limits[l.category] = Number(l.daily_limit); });
         setCategoryLimits(limits);
-      });
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      }
+    };
+
+    fetchAll();
   }, [user, refreshKey]);
 
   // --- Calculations ---
