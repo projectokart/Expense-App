@@ -140,14 +140,18 @@ export default function MissionPanel({ activeMission, userId, onMissionChange }:
     if (!activeMission) return;
     if (!confirm("Finish this mission and archive?")) return;
     setFinishing(true);
-    const { error } = await supabase
-      .from("missions")
-      .update({ status: "completed", end_date: new Date().toISOString().split("T")[0] })
-      .eq("id", activeMission.id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Mission completed!");
+    try {
+      const { error } = await supabase
+        .from("missions")
+        .update({ status: "completed", end_date: new Date().toISOString().split("T")[0] })
+        .eq("id", activeMission.id)
+        .eq("user_id", userId);
+      if (error) throw error;
+      toast.success("Mission completed successfully.");
       onMissionChange();
+    } catch (err: any) {
+      console.error("Mission finish error:", err);
+      toast.error("Unable to complete mission. Please try again.");
     }
     setFinishing(false);
   };

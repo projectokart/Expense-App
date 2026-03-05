@@ -7,6 +7,16 @@ import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 import AdminJournalLogbook from "@/components/admin/AdminJournalLogbook";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   // 🧭 Navigation & Action Icons
   User, 
@@ -258,12 +268,10 @@ const updateExpenseStatus = async (expense: any, nextStatus: 'approved' | 'rejec
 const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
 // 2. Optimized Delete Function
-const deleteExpense = async (id: string) => {
-  // Desi touch with professional warning
-  const confirmDelete = window.confirm("⚠️ Bhai, delete kar diya toh wapis nahi aayega. Sure ho?");
-  if (!confirmDelete) return;
+const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  setIsActionLoading(id); // Button ko disable karne ke liye
+const deleteExpense = async (id: string) => {
+  setIsActionLoading(id);
   try {
     const { error } = await supabase
       .from("expenses")
@@ -272,14 +280,15 @@ const deleteExpense = async (id: string) => {
 
     if (error) throw error;
     
-    toast.success("Record Deleted! 🗑️");
-    // Local state se turant remove karein taaki UI fast lage
-    loadData(); 
+    // Remove from local state instantly
+    setExpenses(prev => prev.filter(e => e.id !== id));
+    toast.success("Expense deleted successfully.");
   } catch (err: any) {
-    toast.error(err.message || "Delete fail ho gaya!");
     console.error("Delete Error:", err);
+    toast.error("Unable to delete expense. Please try again.");
   } finally {
     setIsActionLoading(null);
+    setDeleteConfirmId(null);
   }
 };
 
@@ -959,12 +968,11 @@ const uniqueMissionsReport = useMemo(() => {
           )}
 
           <button
-            onClick={() => {
-              if (window.confirm("Delete?")) deleteExpense(e.id);
-            }}
-            className="w-9 h-9 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-[1rem] flex items-center justify-center border border-transparent hover:border-rose-100 active:scale-95 transition-all"
+            onClick={() => setDeleteConfirmId(e.id)}
+            disabled={isActionLoading === e.id}
+            className="w-9 h-9 bg-slate-50 text-slate-400 hover:text-rose-500 rounded-[1rem] flex items-center justify-center border border-transparent hover:border-rose-100 active:scale-95 transition-all disabled:opacity-50"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            {isActionLoading === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
@@ -1636,6 +1644,27 @@ const uniqueMissionsReport = useMemo(() => {
         {/* Journal Tab */}
         {tab === "journal" && <AdminJournalLogbook />}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this expense?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The expense record will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteConfirmId && deleteExpense(deleteConfirmId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

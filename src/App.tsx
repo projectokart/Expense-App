@@ -20,9 +20,10 @@ const PageLoader = () => (
 );
 
 function ProtectedRoute({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
-  const { user, role, loading } = useAuth();
+  const { user, role, profile, loading } = useAuth();
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
+  if (profile && !profile.is_approved) return <Navigate to="/login" replace />;
   if (adminOnly && role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
