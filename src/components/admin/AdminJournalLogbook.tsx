@@ -1,12 +1,24 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import {
   ChevronDown, ChevronRight, User, Target, Calendar,
-  MapPin, Users as UsersIcon, FileText, Camera, Eye
+  MapPin, Users as UsersIcon, FileText, Camera, Eye,
+  Pencil, Trash2, Save, X, Loader2
 } from "lucide-react";
 import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 import MissionGallery from "@/components/expense/MissionGallery";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const CATEGORY_DOT_COLORS: Record<string, string> = {
   travel: "bg-blue-500",
@@ -62,12 +74,22 @@ export default function AdminJournalLogbook() {
   const [filterUser, setFilterUser] = useState("all");
   const [filterMission, setFilterMission] = useState("all");
   const [filterDate, setFilterDate] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all"); // "all" | "active" | "completed"
 
   // Expand states
   const [expandedMissions, setExpandedMissions] = useState<Set<string>>(new Set());
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Edit states
+  const [editingMissionId, setEditingMissionId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", address: "", mission_with: "", details: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete states
+  const [deleteMissionId, setDeleteMissionId] = useState<string | null>(null);
+  const [deletingMission, setDeletingMission] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -93,37 +115,35 @@ export default function AdminJournalLogbook() {
     setLoading(false);
   };
 
-  // Unique users from missions
   const uniqueUsers = useMemo(() => {
     return Array.from(new Map(profiles.map(p => [p.id, p])).values());
   }, [profiles]);
 
-  // Filtered missions based on dropdown
   const filteredMissionDropdown = useMemo(() => {
     if (filterUser === "all") return missions;
     return missions.filter(m => m.user_id === filterUser);
   }, [missions, filterUser]);
 
-  // Main filtered missions
+  // Show ALL missions by default (active + completed)
   const filteredMissions = useMemo(() => {
     let result = missions;
 
-    // Default: show active missions of all users
-    if (filterUser === "all" && filterMission === "all" && !filterDate) {
-      return result.filter(m => m.status === "active" || m.status === "pending");
-    }
-
-    // When user is selected: show active + completed
     if (filterUser !== "all") {
       result = result.filter(m => m.user_id === filterUser);
     }
-
     if (filterMission !== "all") {
       result = result.filter(m => m.id === filterMission);
     }
+    if (filterStatus !== "all") {
+      if (filterStatus === "active") {
+        result = result.filter(m => m.status === "active" || m.status === "pending");
+      } else {
+        result = result.filter(m => m.status === "completed");
+      }
+    }
 
     return result;
-  }, [missions, filterUser, filterMission, filterDate]);
+  }, [missions, filterUser, filterMission, filterStatus]);
 
   const getExpensesForMission = (missionId: string) => {
     let exps = expenses.filter(e => e.mission_id === missionId);
@@ -160,6 +180,73 @@ export default function AdminJournalLogbook() {
 
   const formatDateStr = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  };
+
+  // --- Edit Mission ---
+  const startEditMission = (mission: Mission) => {
+    setEditingMissionId(mission.id);
+    setEditForm({
+      name: mission.name,
+      address: mission.address || "",
+      mission_with: mission.mission_with || "",
+      details: mission.details || "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingMissionId(null);
+    setEditForm({ name: "", address: "", mission_with: "", details: "" });
+  };
+
+  const saveEditMission = async () => {
+    if (!editingMissionId) return;
+    if (!editForm.name.trim()) {
+      toast.error("Mission name is required!");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const { error } = await supabase.from("missions").update({
+        name: editForm.name.trim(),
+        address: editForm.address.trim(),
+        mission_with: editForm.mission_with.trim(),
+        details: editForm.details.trim(),
+      }).eq("id", editingMissionId);
+
+      if (error) throw error;
+      toast.success("Mission updated successfully!");
+      setEditingMissionId(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Unable to update mission. Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // --- Delete Mission ---
+  const confirmDeleteMission = async () => {
+    if (!deleteMissionId) return;
+    setDeletingMission(true);
+    try {
+      // Delete related expenses first
+      await supabase.from("expenses").delete().eq("mission_id", deleteMissionId);
+      // Delete mission photos
+      await supabase.from("mission_photos").delete().eq("mission_id", deleteMissionId);
+      // Delete settlements
+      await supabase.from("settlements").delete().eq("mission_id", deleteMissionId);
+      // Delete mission
+      const { error } = await supabase.from("missions").delete().eq("id", deleteMissionId);
+      if (error) throw error;
+
+      setMissions(prev => prev.filter(m => m.id !== deleteMissionId));
+      toast.success("Mission deleted successfully!");
+    } catch (err: any) {
+      toast.error("Unable to delete mission. Please try again.");
+    } finally {
+      setDeletingMission(false);
+      setDeleteMissionId(null);
+    }
   };
 
   if (role !== "admin") {
@@ -236,50 +323,124 @@ export default function AdminJournalLogbook() {
     const cashTotal = missionExpenses.filter(e => e.category === "cash").reduce((s, e) => s + Number(e.amount), 0);
     const isExpanded = expandedMissions.has(mission.id);
     const isActive = mission.status === "active" || mission.status === "pending";
+    const isEditing = editingMissionId === mission.id;
 
     return (
       <div key={mission.id} className="bg-white rounded-[1.8rem] border border-gray-100 overflow-hidden animate-fade-in mb-3 shadow-sm">
-        <button
-          onClick={() => toggleMission(mission.id)}
-          className="w-full p-4 bg-gray-50/50 border-b border-gray-50 text-left hover:bg-gray-100/50 transition-colors"
-        >
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2">
-              {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-500" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-              <div>
-                <h4 className="text-xs font-black text-gray-800 uppercase tracking-tight">{mission.name}</h4>
-                <p className="text-[8px] font-bold text-blue-500 uppercase mt-0.5">{mission.user_name}</p>
-                {mission.address && (
-                  <p className="text-[8px] text-gray-400 font-bold flex items-center gap-0.5 mt-0.5">
-                    <MapPin className="w-2.5 h-2.5" /> {mission.address}
-                  </p>
-                )}
-                {mission.mission_with && (
-                  <p className="text-[8px] text-gray-400 font-bold flex items-center gap-0.5">
-                    <UsersIcon className="w-2.5 h-2.5" /> {mission.mission_with}
-                  </p>
-                )}
-                <p className="text-[8px] text-gray-400 font-bold mt-0.5">
-                  {formatDateStr(mission.start_date)}{mission.end_date ? ` → ${formatDateStr(mission.end_date)}` : " → Ongoing"}
-                </p>
+        <div className="w-full p-4 bg-gray-50/50 border-b border-gray-50">
+          {isEditing ? (
+            /* Edit Form */
+            <div className="space-y-2" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[8px] font-black uppercase tracking-widest text-blue-500">Edit Mission</p>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={saveEditMission}
+                    disabled={savingEdit}
+                    className="flex items-center gap-1 bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase disabled:opacity-50"
+                  >
+                    {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Save
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="flex items-center gap-1 bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase"
+                  >
+                    <X className="w-3 h-3" /> Cancel
+                  </button>
+                </div>
               </div>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Mission Name *"
+                className="w-full p-2 rounded-lg bg-white border border-gray-200 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                type="text"
+                value={editForm.address}
+                onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="Address"
+                className="w-full p-2 rounded-lg bg-white border border-gray-200 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <input
+                type="text"
+                value={editForm.mission_with}
+                onChange={e => setEditForm(f => ({ ...f, mission_with: e.target.value }))}
+                placeholder="Mission With"
+                className="w-full p-2 rounded-lg bg-white border border-gray-200 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <textarea
+                value={editForm.details}
+                onChange={e => setEditForm(f => ({ ...f, details: e.target.value }))}
+                placeholder="Details"
+                rows={2}
+                className="w-full p-2 rounded-lg bg-white border border-gray-200 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+              />
             </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-xs font-black text-gray-900">₹{missionTotal.toLocaleString()}</p>
-              {cashTotal > 0 && <p className="text-[9px] font-bold text-emerald-600">+₹{cashTotal.toLocaleString()} cash</p>}
-              <div className="flex gap-1.5 mt-1 justify-end">
-                <span className="text-[7px] bg-gray-100 px-2 py-0.5 rounded-full font-black text-gray-500">{missionExpenses.length} entries</span>
-                <span className={`text-[7px] px-2 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[mission.status] || "bg-gray-100 text-gray-500"}`}>
-                  {mission.status}
-                </span>
+          ) : (
+            /* Normal View */
+            <button
+              onClick={() => toggleMission(mission.id)}
+              className="w-full text-left hover:bg-gray-100/50 transition-colors"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2">
+                  {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-500" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  <div>
+                    <h4 className="text-xs font-black text-gray-800 uppercase tracking-tight">{mission.name}</h4>
+                    <p className="text-[8px] font-bold text-blue-500 uppercase mt-0.5">{mission.user_name}</p>
+                    {mission.address && (
+                      <p className="text-[8px] text-gray-400 font-bold flex items-center gap-0.5 mt-0.5">
+                        <MapPin className="w-2.5 h-2.5" /> {mission.address}
+                      </p>
+                    )}
+                    {mission.mission_with && (
+                      <p className="text-[8px] text-gray-400 font-bold flex items-center gap-0.5">
+                        <UsersIcon className="w-2.5 h-2.5" /> {mission.mission_with}
+                      </p>
+                    )}
+                    <p className="text-[8px] text-gray-400 font-bold mt-0.5">
+                      {formatDateStr(mission.start_date)}{mission.end_date ? ` → ${formatDateStr(mission.end_date)}` : " → Ongoing"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-black text-gray-900">₹{missionTotal.toLocaleString()}</p>
+                  {cashTotal > 0 && <p className="text-[9px] font-bold text-emerald-600">+₹{cashTotal.toLocaleString()} cash</p>}
+                  <div className="flex gap-1.5 mt-1 justify-end">
+                    <span className="text-[7px] bg-gray-100 px-2 py-0.5 rounded-full font-black text-gray-500">{missionExpenses.length} entries</span>
+                    <span className={`text-[7px] px-2 py-0.5 rounded-full font-black uppercase ${STATUS_BADGES[mission.status] || "bg-gray-100 text-gray-500"}`}>
+                      {mission.status}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </button>
+            </button>
+          )}
 
-        {isExpanded && (
+          {/* Admin Action Buttons (visible when not editing) */}
+          {!isEditing && (
+            <div className="flex gap-2 mt-2 pl-6">
+              <button
+                onClick={(e) => { e.stopPropagation(); startEditMission(mission); }}
+                className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-[7px] font-black uppercase hover:bg-blue-100 transition-colors"
+              >
+                <Pencil className="w-2.5 h-2.5" /> Edit
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeleteMissionId(mission.id); }}
+                className="flex items-center gap-1 bg-rose-50 text-rose-600 px-2.5 py-1 rounded-lg text-[7px] font-black uppercase hover:bg-rose-100 transition-colors"
+              >
+                <Trash2 className="w-2.5 h-2.5" /> Delete
+              </button>
+            </div>
+          )}
+        </div>
+
+        {isExpanded && !isEditing && (
           <div>
-            {/* Mission Details */}
             {mission.details && (
               <div className="px-5 pt-3 pb-1">
                 <div className="flex items-start gap-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
@@ -289,12 +450,10 @@ export default function AdminJournalLogbook() {
               </div>
             )}
 
-            {/* Mission Gallery */}
             <div className="px-5 pb-2">
               <MissionGallery missionId={mission.id} userId={mission.user_id} isActive={false} />
             </div>
 
-            {/* Expense entries */}
             <div className="divide-y divide-gray-50">
               {dateGroups.length === 0 && (
                 <p className="text-center text-gray-400 text-[10px] italic py-6">No entries found</p>
@@ -349,7 +508,7 @@ export default function AdminJournalLogbook() {
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-gray-400 italic">Journal Filters</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {/* User Filter */}
           <div className="group space-y-1">
             <label className="text-[7px] font-black uppercase text-gray-400 ml-1">User</label>
@@ -358,7 +517,7 @@ export default function AdminJournalLogbook() {
                 value={filterUser}
                 onChange={(e) => {
                   setFilterUser(e.target.value);
-                  setFilterMission("all"); // Reset mission when user changes
+                  setFilterMission("all");
                 }}
                 className="w-full bg-gray-50/50 border border-transparent p-2 rounded-xl text-[9px] font-black uppercase outline-none appearance-none focus:bg-white focus:ring-2 focus:ring-blue-500/10"
               >
@@ -387,6 +546,23 @@ export default function AdminJournalLogbook() {
             </div>
           </div>
 
+          {/* Status Filter */}
+          <div className="group space-y-1">
+            <label className="text-[7px] font-black uppercase text-gray-400 ml-1">Status</label>
+            <div className="relative">
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full bg-gray-50/50 border border-transparent p-2 rounded-xl text-[9px] font-black uppercase outline-none appearance-none focus:bg-white focus:ring-2 focus:ring-emerald-500/10"
+              >
+                <option value="all">All (Active + Old)</option>
+                <option value="active">Active Only</option>
+                <option value="completed">Completed Only</option>
+              </select>
+              <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-gray-300 pointer-events-none" />
+            </div>
+          </div>
+
           {/* Date Filter */}
           <div className="group space-y-1">
             <label className="text-[7px] font-black uppercase text-gray-400 ml-1">Date</label>
@@ -405,9 +581,9 @@ export default function AdminJournalLogbook() {
       {/* Results */}
       <div className="flex justify-between items-center px-2">
         <span className="text-[8px] font-black uppercase opacity-30 tracking-[0.2em]">{filteredMissions.length} Missions</span>
-        {(filterUser !== "all" || filterMission !== "all" || filterDate) && (
+        {(filterUser !== "all" || filterMission !== "all" || filterDate || filterStatus !== "all") && (
           <button
-            onClick={() => { setFilterUser("all"); setFilterMission("all"); setFilterDate(""); }}
+            onClick={() => { setFilterUser("all"); setFilterMission("all"); setFilterDate(""); setFilterStatus("all"); }}
             className="text-[8px] font-black text-blue-500 uppercase underline active:opacity-50"
           >
             Clear Filters
@@ -425,6 +601,29 @@ export default function AdminJournalLogbook() {
       )}
 
       <ImagePreviewModal imageUrl={previewImage} onClose={() => setPreviewImage(null)} />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteMissionId} onOpenChange={(open) => !open && setDeleteMissionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Mission?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this mission along with all its expenses, photos, and settlements. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingMission}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteMission}
+              disabled={deletingMission}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingMission ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
