@@ -100,6 +100,15 @@ const [filters, setFilters] = useState({
 // Inhe baaki states ke saath add karein
 const [selectedExpense, setSelectedExpense] = useState<any>(null);
 const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+// Add User states
+const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+const [newUserForm, setNewUserForm] = useState({ name: "", email: "", password: "" });
+const [addingUser, setAddingUser] = useState(false);
+
+// Delete User states
+const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+const [deletingUser, setDeletingUser] = useState(false);
   // 2. Standard States
   const [tab, setTab] = useState<Tab>("expenses");
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -454,6 +463,54 @@ const sanitizeCSVField = (field: string): string => {
   let clean = String(field || '').replace(/"/g, '""');
   if (/^[=+\-@\t\r]/.test(clean)) clean = "'" + clean;
   return clean;
+};
+
+// --- Add User Handler ---
+const handleAddUser = async () => {
+  if (!newUserForm.name.trim() || !newUserForm.email.trim() || !newUserForm.password.trim()) {
+    toast.error("All fields are required!");
+    return;
+  }
+  if (newUserForm.password.length < 6) {
+    toast.error("Password must be at least 6 characters!");
+    return;
+  }
+  setAddingUser(true);
+  try {
+    const { data, error } = await supabase.functions.invoke("admin-user-management", {
+      body: { action: "add_user", name: newUserForm.name.trim(), email: newUserForm.email.trim(), password: newUserForm.password },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    toast.success("User created successfully!");
+    setNewUserForm({ name: "", email: "", password: "" });
+    setIsAddUserOpen(false);
+    loadData();
+  } catch (err: any) {
+    toast.error(err.message || "Unable to create user.");
+  } finally {
+    setAddingUser(false);
+  }
+};
+
+// --- Delete User Handler ---
+const handleDeleteUser = async () => {
+  if (!deleteUserId) return;
+  setDeletingUser(true);
+  try {
+    const { data, error } = await supabase.functions.invoke("admin-user-management", {
+      body: { action: "delete_user", user_id: deleteUserId },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    setUsers(prev => prev.filter(u => u.id !== deleteUserId));
+    toast.success("User deleted successfully!");
+  } catch (err: any) {
+    toast.error(err.message || "Unable to delete user.");
+  } finally {
+    setDeletingUser(false);
+    setDeleteUserId(null);
+  }
 };
 
 const exportCSV = () => { 
@@ -1218,15 +1275,67 @@ const uniqueMissionsReport = useMemo(() => {
 {tab === "users" && (
   <div className="space-y-2.5 pb-24 animate-in fade-in duration-500 px-3">
     {/* Google Style Compact Header */}
-    <div className="flex items-center gap-2 mb-4 px-2 pt-2">
-      <div className="flex gap-0.5">
-        <div className="w-1.5 h-1.5 rounded-full bg-[#4285F4]" />
-        <div className="w-1.5 h-1.5 rounded-full bg-[#EA4335]" />
-        <div className="w-1.5 h-1.5 rounded-full bg-[#FBBC05]" />
-        <div className="w-1.5 h-1.5 rounded-full bg-[#34A853]" />
+    <div className="flex items-center justify-between mb-4 px-2 pt-2">
+      <div className="flex items-center gap-2">
+        <div className="flex gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#4285F4]" />
+          <div className="w-1.5 h-1.5 rounded-full bg-[#EA4335]" />
+          <div className="w-1.5 h-1.5 rounded-full bg-[#FBBC05]" />
+          <div className="w-1.5 h-1.5 rounded-full bg-[#34A853]" />
+        </div>
+        <h2 className="font-bold text-gray-500 text-[10px] uppercase tracking-[0.15em]">Directory Control</h2>
       </div>
-      <h2 className="font-bold text-gray-500 text-[10px] uppercase tracking-[0.15em]">Directory Control</h2>
+      <button
+        onClick={() => setIsAddUserOpen(true)}
+        className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-[8px] font-black uppercase shadow-sm active:scale-95 transition-all"
+      >
+        <UserIcon className="w-3 h-3" /> Add User
+      </button>
     </div>
+
+    {/* Add User Form */}
+    {isAddUserOpen && (
+      <div className="bg-white p-4 rounded-[1.8rem] border border-gray-100 shadow-sm space-y-2 mb-3 animate-in fade-in duration-300">
+        <p className="text-[8px] font-black uppercase tracking-widest text-blue-500 mb-2">New User</p>
+        <input
+          type="text"
+          placeholder="Full Name *"
+          value={newUserForm.name}
+          onChange={e => setNewUserForm(f => ({ ...f, name: e.target.value }))}
+          className="w-full p-2.5 rounded-xl bg-gray-50 text-foreground outline-none text-[10px] font-bold border border-gray-200 focus:ring-2 focus:ring-primary/20"
+        />
+        <input
+          type="email"
+          placeholder="Email *"
+          value={newUserForm.email}
+          onChange={e => setNewUserForm(f => ({ ...f, email: e.target.value }))}
+          className="w-full p-2.5 rounded-xl bg-gray-50 text-foreground outline-none text-[10px] font-bold border border-gray-200 focus:ring-2 focus:ring-primary/20"
+        />
+        <input
+          type="password"
+          placeholder="Password *"
+          value={newUserForm.password}
+          onChange={e => setNewUserForm(f => ({ ...f, password: e.target.value }))}
+          className="w-full p-2.5 rounded-xl bg-gray-50 text-foreground outline-none text-[10px] font-bold border border-gray-200 focus:ring-2 focus:ring-primary/20"
+        />
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleAddUser}
+            disabled={addingUser}
+            className="flex-1 flex items-center justify-center gap-1 bg-emerald-500 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase disabled:opacity-50"
+          >
+            {addingUser ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+            Create User
+          </button>
+          <button
+            onClick={() => { setIsAddUserOpen(false); setNewUserForm({ name: "", email: "", password: "" }); }}
+            className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-[9px] font-black uppercase"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
 
     <div className="space-y-2">
       {users.map(u => {
@@ -1269,36 +1378,46 @@ const uniqueMissionsReport = useMemo(() => {
             </div>
 
             {/* 3. Action Slot - Compact Google Buttons */}
-            <div className="flex-shrink-0 ml-auto">
+            <div className="flex-shrink-0 ml-auto flex items-center gap-1.5">
               {canManage ? (
-                !isApproved ? (
+                <>
+                  {!isApproved ? (
+                    <button
+                      onClick={() => approveUser(u.id)}
+                      className="px-4 py-2 bg-[#FBBC05] text-white rounded-full text-[9px] font-black uppercase tracking-tight shadow-md shadow-yellow-100 active:scale-90 transition-all"
+                    >
+                      Verify
+                    </button>
+                  ) : (
+                    /* Role Switcher - Material Look */
+                    <div className="flex bg-gray-50 p-1 rounded-full border border-gray-100">
+                      <button
+                        onClick={() => toggleUserRole(u, 'admin')}
+                        className={`px-3 py-1.5 rounded-full text-[8px] font-bold uppercase transition-all ${
+                          isAdmin ? 'bg-white text-[#EA4335] shadow-sm' : 'text-gray-400'
+                        }`}
+                      >
+                        Admin
+                      </button>
+                      <button
+                        onClick={() => toggleUserRole(u, 'user')}
+                        className={`px-3 py-1.5 rounded-full text-[8px] font-bold uppercase transition-all ${
+                          !isAdmin ? 'bg-white text-[#34A853] shadow-sm' : 'text-gray-400'
+                        }`}
+                      >
+                        Staff
+                      </button>
+                    </div>
+                  )}
+                  {/* Delete User Button */}
                   <button
-                    onClick={() => approveUser(u.id)}
-                    className="px-4 py-2 bg-[#FBBC05] text-white rounded-full text-[9px] font-black uppercase tracking-tight shadow-md shadow-yellow-100 active:scale-90 transition-all"
+                    onClick={() => setDeleteUserId(u.id)}
+                    className="p-1.5 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors"
+                    title="Delete User"
                   >
-                    Verify
+                    <Trash2 className="w-3 h-3" />
                   </button>
-                ) : (
-                  /* Role Switcher - Material Look */
-                  <div className="flex bg-gray-50 p-1 rounded-full border border-gray-100">
-                    <button
-                      onClick={() => toggleUserRole(u, 'admin')}
-                      className={`px-3 py-1.5 rounded-full text-[8px] font-bold uppercase transition-all ${
-                        isAdmin ? 'bg-white text-[#EA4335] shadow-sm' : 'text-gray-400'
-                      }`}
-                    >
-                      Admin
-                    </button>
-                    <button
-                      onClick={() => toggleUserRole(u, 'user')}
-                      className={`px-3 py-1.5 rounded-full text-[8px] font-bold uppercase transition-all ${
-                        !isAdmin ? 'bg-white text-[#34A853] shadow-sm' : 'text-gray-400'
-                      }`}
-                    >
-                      Staff
-                    </button>
-                  </div>
-                )
+                </>
               ) : (
                 <div 
                   style={{ color: themeColor, backgroundColor: `${themeColor}10` }}
@@ -1312,6 +1431,29 @@ const uniqueMissionsReport = useMemo(() => {
         );
       })}
     </div>
+
+    {/* Delete User Confirmation */}
+    <AlertDialog open={!!deleteUserId} onOpenChange={(open) => !open && setDeleteUserId(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete User?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete this user and all their data (expenses, missions, settlements). This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deletingUser}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeleteUser}
+            disabled={deletingUser}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deletingUser ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 )}
         {/* Limits Tab - Same as your code */}
