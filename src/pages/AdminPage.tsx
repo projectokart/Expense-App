@@ -374,6 +374,15 @@ const deleteExpense = async (id: string) => {
 
     toast.success("Account Settled Successfully!");
     
+    if (selectedUser) {
+      await createNotification(
+        selectedUser,
+        "settlement",
+        "Payment Received",
+        `₹${settleData.amount} has been settled to your account.${settleData.note ? ' Note: ' + settleData.note : ''}`,
+      );
+    }
+    
     // ✅ Form Reset with clean state
     setSettleData({ ...settleData, amount: 0, proofUrl: "", note: "" });
     setPreviewUrl(''); // Preview saaf karein
