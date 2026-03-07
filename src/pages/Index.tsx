@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, History, X, Image as ImageIcon, Maximize2 } from "lucide-react";
+import { LogOut, Settings, History, X, Image as ImageIcon, Maximize2, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 // Components
