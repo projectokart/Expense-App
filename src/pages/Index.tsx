@@ -48,6 +48,7 @@ export default function UserDashboard() {
         const limits: Record<string, number> = {};
         limitsRes.data?.forEach(l => { limits[l.category] = Number(l.daily_limit); });
         setCategoryLimits(limits);
+        setUnreadCount((notifRes as any).count || 0);
       } catch (err) {
         console.error("Dashboard fetch error:", err);
       }
