@@ -82,13 +82,26 @@ export default function ExpenseForm({
   };
 
   const getCategoryLimitStatus = (category: string) => {
-    const limit = categoryLimits[category];
-    if (!limit || limit === 0) return null; // No limit set
+    const baseLimit = categoryLimits[category];
+    if (!baseLimit || baseLimit === 0) return null;
     const { total } = getCategoryUsage(category);
-    const remaining = limit - total;
+    
+    let effectiveLimit = baseLimit;
+    if (category === "meal") {
+      const existingPeople = todayExpenses
+        .filter(e => e.category === "meal")
+        .reduce((s, e) => s + (Number((e as any).number_of_people) || 1), 0);
+      const currentPeople = cards
+        .filter(c => c.category === "meal")
+        .reduce((s, c) => s + c.subRows.reduce((ss, r) => ss + (r.peopleCount || 1), 0), 0);
+      const totalPeople = existingPeople + currentPeople;
+      if (totalPeople > 0) effectiveLimit = baseLimit * totalPeople;
+    }
+    
+    const remaining = effectiveLimit - total;
     const exceeded = remaining < 0;
-    const pct = Math.min((total / limit) * 100, 100);
-    return { limit, total, remaining, exceeded, pct };
+    const pct = Math.min((total / effectiveLimit) * 100, 100);
+    return { limit: effectiveLimit, total, remaining, exceeded, pct };
   };
 
   const addCard = () => {
