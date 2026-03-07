@@ -8,6 +8,7 @@ interface SubRow {
   id: string;
   description: string;
   amount: string;
+  peopleCount: number;
   imageFile: File | null;
   imagePreview: string | null;
   uploadedUrl: string | null;
