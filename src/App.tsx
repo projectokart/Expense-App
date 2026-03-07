@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage";
 import Index from "./pages/Index";
 
 const AdminPage = React.lazy(() => import("./pages/AdminPage"));
+const NotificationsPage = React.lazy(() => import("./pages/NotificationsPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const PageLoader = () => (
