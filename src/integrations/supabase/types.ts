@@ -51,6 +51,7 @@ export type Database = {
           id: string
           image_url: string | null
           mission_id: string | null
+          number_of_people: number
           proof_url: string | null
           rejected_reason: string | null
           settled_at: string | null
@@ -70,6 +71,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           mission_id?: string | null
+          number_of_people?: number
           proof_url?: string | null
           rejected_reason?: string | null
           settled_at?: string | null
@@ -89,6 +91,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           mission_id?: string | null
+          number_of_people?: number
           proof_url?: string | null
           rejected_reason?: string | null
           settled_at?: string | null
@@ -196,6 +199,39 @@ export type Database = {
           start_date?: string
           status?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string | null
+          related_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          related_id?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          related_id?: string | null
+          title?: string
+          type?: string
           user_id?: string
         }
         Relationships: []
