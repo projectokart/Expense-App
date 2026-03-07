@@ -242,6 +242,13 @@ const approveExpense = async (expenseId: string) => {
 
     if (error) throw error;
     toast.success("Expense Approved!");
+    await createNotification(
+      expense.user_id,
+      "expense_approved",
+      "Expense Approved",
+      `₹${parsedAmount} (${expense.category}) approved.${adminNote ? ' Note: ' + adminNote : ''}`,
+      expenseId
+    );
     loadData();
   } catch (err: any) {
     toast.error(err.message);
