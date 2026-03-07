@@ -384,6 +384,19 @@ export default function JourneyLogbook({ userId, refreshKey }: Props) {
                 {entry.rejected_reason && (
                   <p className="text-[8px] text-destructive font-bold italic mt-1 leading-tight">⚠ {entry.rejected_reason}</p>
                 )}
+                
+                {entry.admin_note && (
+                  <div className="flex items-start gap-1 mt-1 bg-primary/5 px-1.5 py-1 rounded-md">
+                    <MessageSquareText className="w-2.5 h-2.5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-[8px] text-primary font-bold italic leading-tight">{entry.admin_note}</p>
+                  </div>
+                )}
+                
+                {entry.number_of_people > 1 && (
+                  <p className="text-[8px] text-amber-600 font-bold mt-0.5">
+                    👥 {entry.number_of_people} people
+                  </p>
+                )}
 
                 <div className="flex justify-between items-end mt-2">
                   <p className="text-[9px] text-muted-foreground font-medium italic">

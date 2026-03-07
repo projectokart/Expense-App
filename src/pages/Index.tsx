@@ -90,6 +90,14 @@ export default function UserDashboard() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => navigate("/notifications")} className="relative bg-primary-foreground/10 p-2 rounded-xl text-primary-foreground border border-white/10 active:scale-90 transition-all">
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
             {role === "admin" && (
               <button onClick={() => navigate("/admin")} className="bg-primary-foreground/10 p-2 rounded-xl text-primary-foreground border border-white/10 active:scale-90 transition-all">
                 <Settings className="w-4 h-4" />
