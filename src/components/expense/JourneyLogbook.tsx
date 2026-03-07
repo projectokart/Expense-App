@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
-  Camera, Eye, Save, X, Loader2, 
+  Camera, Eye, Save, X, Loader2, MessageSquareText,
   ChevronDown, Lock as LockKeyhole, ChevronRight, MapPin, Users as UsersIcon, FileText
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
