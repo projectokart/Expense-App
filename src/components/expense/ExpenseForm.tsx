@@ -86,22 +86,10 @@ export default function ExpenseForm({
     if (!baseLimit || baseLimit === 0) return null;
     const { total } = getCategoryUsage(category);
     
-    let effectiveLimit = baseLimit;
-    if (category === "meal") {
-      const existingPeople = todayExpenses
-        .filter(e => e.category === "meal")
-        .reduce((s, e) => s + (Number((e as any).number_of_people) || 1), 0);
-      const currentPeople = cards
-        .filter(c => c.category === "meal")
-        .reduce((s, c) => s + c.subRows.reduce((ss, r) => ss + (r.peopleCount || 1), 0), 0);
-      const totalPeople = existingPeople + currentPeople;
-      if (totalPeople > 0) effectiveLimit = baseLimit * totalPeople;
-    }
-    
-    const remaining = effectiveLimit - total;
+    const remaining = baseLimit - total;
     const exceeded = remaining < 0;
-    const pct = Math.min((total / effectiveLimit) * 100, 100);
-    return { limit: effectiveLimit, total, remaining, exceeded, pct };
+    const pct = Math.min((total / baseLimit) * 100, 100);
+    return { limit: baseLimit, total, remaining, exceeded, pct };
   };
 
   const addCard = () => {
@@ -281,7 +269,7 @@ const uploadImage = async (cardId: string, subId: string) => {
         category: card.category,
         description: row.description,
         amount: amountValue,
-        number_of_people: card.category === "meal" ? (row.peopleCount || 1) : 1,
+        number_of_people: 1,
         image_url: row.uploadedUrl || null,
         status: "pending",
       });
@@ -304,8 +292,8 @@ const uploadImage = async (cardId: string, subId: string) => {
   }
 
   if (exceededCategories.length > 0) {
-    toast.error(`Limit cross ho gayi hai: ${exceededCategories.join(", ")}`);
-    return;
+    toast.warning(`Limit exceeded for: ${exceededCategories.join(", ")}. Admin may adjust the amount.`);
+    // Don't block - allow submission with warning
   }
 
   // 5. Database Insert
@@ -389,7 +377,7 @@ const uploadImage = async (cardId: string, subId: string) => {
                     />
                   </div>
                   {status.exceeded && (
-                    <p className="mt-1 text-[8px] italic">Reduce amount to submit. Current overage: ₹{Math.abs(status.remaining).toLocaleString()}</p>
+                    <p className="mt-1 text-[8px] italic">⚠ You exceeded the limit by ₹{Math.abs(status.remaining).toLocaleString()}. Admin may cut the extra amount.</p>
                   )}
                 </div>
               );
@@ -438,26 +426,7 @@ const uploadImage = async (cardId: string, subId: string) => {
         </div>
       </div>
 
-      {/* People Count for Meal */}
-      {card.category === "meal" && (
-        <div className="flex items-center gap-2 mt-2 bg-amber-50/80 p-2 rounded-lg border border-amber-200/50">
-          <Users className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-          <span className="text-[9px] font-black text-amber-700 uppercase tracking-wider">People</span>
-          <div className="flex items-center gap-1 ml-auto">
-            <button
-              type="button"
-              onClick={() => updateSubRow(card.id, row.id, "peopleCount", Math.max(1, (row.peopleCount || 1) - 1))}
-              className="w-6 h-6 rounded-md bg-white border border-amber-200 text-amber-700 font-black text-sm flex items-center justify-center active:scale-90"
-            >−</button>
-            <span className="w-6 text-center text-[11px] font-black text-amber-800">{row.peopleCount || 1}</span>
-            <button
-              type="button"
-              onClick={() => updateSubRow(card.id, row.id, "peopleCount", Math.min(10, (row.peopleCount || 1) + 1))}
-              className="w-6 h-6 rounded-md bg-white border border-amber-200 text-amber-700 font-black text-sm flex items-center justify-center active:scale-90"
-            >+</button>
-          </div>
-        </div>
-      )}
+      {/* People Count removed - limits are now soft warnings */}
 
       {/* Image Actions (Auto-Upload Version) */}
       <div className="flex items-center justify-between px-1 mt-3">
@@ -535,10 +504,7 @@ const uploadImage = async (cardId: string, subId: string) => {
   disabled={
     saving || 
     cards.some(card => {
-      // 1. Check: Category missing check
       if (!card.category) return true;
-      
-      // 2. Check: Detail aur Positive Amount check
       const hasInvalidRow = card.subRows.some(row => {
         const amountNum = parseFloat(row.amount);
         return (
@@ -547,29 +513,24 @@ const uploadImage = async (cardId: string, subId: string) => {
           amountNum <= 0
         );
       });
-
-      // 3. Check: Live Limit Check (Existing + Current entries)
-      const status = getCategoryLimitStatus(card.category);
-      const isLimitExceeded = status?.exceeded || false;
-
-      return hasInvalidRow || isLimitExceeded;
+      return hasInvalidRow;
     })
   }
   className={`w-full mt-6 py-3.5 rounded-xl font-black uppercase text-[10px] tracking-[0.15em] transition-all flex items-center justify-center gap-2 shadow-lg
     ${
       cards.some(card => {
-        const status = card.category ? getCategoryLimitStatus(card.category) : null;
         return (
           !card.category || 
           card.subRows.some(row => {
             const amountNum = parseFloat(row.amount);
             return row.description.trim() === "" || !row.amount || amountNum <= 0;
-          }) ||
-          status?.exceeded // Limit cross hone par bhi grey ho jayega
+          })
         );
       })
         ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none" 
-        : "bg-primary text-primary-foreground shadow-primary/20 active:scale-[0.98] hover:opacity-90"
+        : cards.some(c => c.category && getCategoryLimitStatus(c.category)?.exceeded)
+          ? "bg-warning text-warning-foreground shadow-warning/20 active:scale-[0.98] hover:opacity-90"
+          : "bg-primary text-primary-foreground shadow-primary/20 active:scale-[0.98] hover:opacity-90"
     } 
     disabled:opacity-50 disabled:pointer-events-none`}
 >
