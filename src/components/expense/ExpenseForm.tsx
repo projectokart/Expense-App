@@ -41,7 +41,7 @@ function generateSafeId() {
 }
 
 function createSubRow(): SubRow {
-  return { id: generateSafeId(), description: "", amount: "", peopleCount: 1, imageFile: null, imagePreview: null, uploadedUrl: null, uploading: false };
+  return { id: generateSafeId(), description: "", amount: "", imageFile: null, imagePreview: null, uploadedUrl: null, uploading: false };
 }
 
 export default function ExpenseForm({
