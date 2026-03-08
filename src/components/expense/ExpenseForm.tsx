@@ -269,7 +269,7 @@ const uploadImage = async (cardId: string, subId: string) => {
         category: card.category,
         description: row.description,
         amount: amountValue,
-        number_of_people: card.category === "meal" ? (row.peopleCount || 1) : 1,
+        number_of_people: 1,
         image_url: row.uploadedUrl || null,
         status: "pending",
       });
