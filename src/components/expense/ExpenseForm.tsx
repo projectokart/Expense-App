@@ -426,26 +426,7 @@ const uploadImage = async (cardId: string, subId: string) => {
         </div>
       </div>
 
-      {/* People Count for Meal */}
-      {card.category === "meal" && (
-        <div className="flex items-center gap-2 mt-2 bg-amber-50/80 p-2 rounded-lg border border-amber-200/50">
-          <Users className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-          <span className="text-[9px] font-black text-amber-700 uppercase tracking-wider">People</span>
-          <div className="flex items-center gap-1 ml-auto">
-            <button
-              type="button"
-              onClick={() => updateSubRow(card.id, row.id, "peopleCount", Math.max(1, (row.peopleCount || 1) - 1))}
-              className="w-6 h-6 rounded-md bg-white border border-amber-200 text-amber-700 font-black text-sm flex items-center justify-center active:scale-90"
-            >−</button>
-            <span className="w-6 text-center text-[11px] font-black text-amber-800">{row.peopleCount || 1}</span>
-            <button
-              type="button"
-              onClick={() => updateSubRow(card.id, row.id, "peopleCount", Math.min(10, (row.peopleCount || 1) + 1))}
-              className="w-6 h-6 rounded-md bg-white border border-amber-200 text-amber-700 font-black text-sm flex items-center justify-center active:scale-90"
-            >+</button>
-          </div>
-        </div>
-      )}
+      {/* People Count removed - limits are now soft warnings */}
 
       {/* Image Actions (Auto-Upload Version) */}
       <div className="flex items-center justify-between px-1 mt-3">
