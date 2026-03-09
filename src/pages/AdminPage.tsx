@@ -1839,6 +1839,8 @@ const uniqueMissionsReport = useMemo(() => {
 )}
         {/* Journal Tab */}
         {tab === "journal" && <AdminJournalLogbook />}
+        {/* Fund Tab */}
+        {tab === "fund" && <AdminFundTab settlements={settlements} users={users} onRefresh={loadData} />}
       </div>
 
       {/* Delete Confirmation Dialog */}
