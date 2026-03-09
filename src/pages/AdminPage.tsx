@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import ImagePreviewModal from "@/components/expense/ImagePreviewModal";
 import AdminJournalLogbook from "@/components/admin/AdminJournalLogbook";
+import AdminFundTab from "@/components/admin/AdminFundTab";
 import {
   AlertDialog,
   AlertDialogAction,
