@@ -62,7 +62,7 @@ RefreshCw
 } from 'lucide-react';
 
 // 1. Added "settlements" to Tab type
-type Tab = "expenses" | "users" | "limits" | "reports" | "settlements" | "journal";
+type Tab = "expenses" | "users" | "limits" | "reports" | "settlements" | "journal" | "fund";
 
 
 
