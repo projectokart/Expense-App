@@ -123,6 +123,36 @@ export type Database = {
           },
         ]
       }
+      fund_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mission_photos: {
         Row: {
           created_at: string
