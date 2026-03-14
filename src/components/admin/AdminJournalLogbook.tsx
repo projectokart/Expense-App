@@ -305,10 +305,13 @@ export default function AdminJournalLogbook() {
           onClick={() => setExpandedEntry(isOpen ? null : entry.id)}
           className="w-full py-3 flex justify-between items-center hover:bg-gray-50 text-left px-1"
         >
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-slate-400"}`} />
-            <span className="text-[10px] font-bold text-gray-800 truncate uppercase">{entry.description || "No Detail"}</span>
-          </div>
+          <div className="flex items-start gap-2 flex-1 min-w-0"> {/* items-center ko items-start kar diya */}
+  <div className={`w-1.5 h-1.5 mt-1 rounded-full flex-shrink-0 ${CATEGORY_DOT_COLORS[entry.category] || "bg-slate-400"}`} />
+  
+  <span className="text-[10px] font-bold text-gray-800 uppercase whitespace-normal break-words">
+    {entry.description || "No Detail"}
+  </span>
+</div>
           <div className="flex items-center gap-2 ml-2">
             <span className={`text-[10px] font-black ${entry.category === "cash" ? "text-emerald-600" : "text-gray-700"}`}>
               ₹{Number(entry.amount).toLocaleString()}
