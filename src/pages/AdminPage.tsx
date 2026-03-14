@@ -1001,9 +1001,9 @@ const uniqueMissionsReport = useMemo(() => {
                 </span>
               </div>
               
-              <h4 className="text-[11px] font-bold text-gray-800 line-clamp-1 leading-tight">
-                {e.description || "No Description"}
-              </h4>
+             <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-tight">
+  {e.description || "No Description"}
+</h4>
 
               {/* 📸 IMAGE SECTION */}
               {receiptImage ? (
