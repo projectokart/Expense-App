@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +17,7 @@ interface FundEntry {
   amount: number;
   source: string;
   note: string | null;
+  receipt_url: string | null;
   created_by: string;
   created_at: string;
 }
@@ -49,6 +49,8 @@ export default function AdminFundTab({ settlements, users, onRefresh }: AdminFun
   // Add fund modal
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ amount: 0, source: '', note: '' });
+  const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null);
+  const [addReceiptPreview, setAddReceiptPreview] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   // Edit fund modal
@@ -81,15 +83,37 @@ export default function AdminFundTab({ settlements, users, onRefresh }: AdminFun
   const remainingFunds = totalFunds - totalSettled;
 
   // --- FUND CRUD ---
+  const uploadReceipt = async (file: File) => {
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `fund-receipts/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`;
+      const { error } = await supabase.storage.from('settlement-proofs').upload(path, file);
+      if (error) throw error;
+      return supabase.storage.from('settlement-proofs').getPublicUrl(path).data.publicUrl;
+    } catch (err: any) { toast.error("Upload failed: " + err.message); return null; }
+  };
+
   const handleAddFund = async () => {
     if (!addForm.amount || addForm.amount <= 0) return toast.error("Enter a valid amount");
-    if (!addForm.source.trim()) return toast.error("Enter source/company name");
+    if (!addForm.source.trim()) return toast.error("Enter source/sender name");
     setSaving(true);
+    let receiptUrl: string | null = null;
+    if (addReceiptFile) {
+      receiptUrl = await uploadReceipt(addReceiptFile);
+    }
     const { error } = await supabase.from('fund_entries' as any).insert({
-      amount: addForm.amount, source: addForm.source.trim(), note: addForm.note.trim() || null, created_by: user?.id
+      amount: addForm.amount, source: addForm.source.trim(),
+      note: addForm.note.trim() || null,
+      receipt_url: receiptUrl,
+      created_by: user?.id
     });
     if (error) toast.error(error.message);
-    else { toast.success("Fund added!"); setAddForm({ amount: 0, source: '', note: '' }); setIsAddOpen(false); fetchFunds(); }
+    else {
+      toast.success("Fund added!");
+      setAddForm({ amount: 0, source: '', note: '' });
+      setAddReceiptFile(null); setAddReceiptPreview('');
+      setIsAddOpen(false); fetchFunds();
+    }
     setSaving(false);
   };
 
@@ -169,34 +193,48 @@ export default function AdminFundTab({ settlements, users, onRefresh }: AdminFun
   return (
     <div className="space-y-4 animate-fade-in pb-24 px-3">
       {/* OVERVIEW CARD */}
-      <div className="bg-gray-900 rounded-[2rem] p-5 text-white shadow-xl relative overflow-hidden">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-400 opacity-80 mb-3">💰 Fund Pool</p>
-        <div className="flex justify-between items-end">
+      <div className="rounded-[1.6rem] p-4 text-white relative overflow-hidden" style={{background:"linear-gradient(135deg,#1e3a5f,#0f2444)"}}>
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <p className="text-[8px] font-bold uppercase opacity-40 mb-1 tracking-widest">Remaining Balance</p>
-            <h2 className={`text-3xl font-black italic tracking-tighter ${remainingFunds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              ₹{remainingFunds.toLocaleString()}
+            <p className="text-[7px] font-black uppercase tracking-[0.2em] text-blue-300 opacity-80 mb-1">Fund Pool</p>
+            <h2 className={`text-3xl font-black tracking-tighter ${remainingFunds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              ₹{Math.abs(remainingFunds).toLocaleString()}
             </h2>
+            <p className="text-[7px] font-bold mt-0.5 opacity-60">
+              {remainingFunds >= 0 ? '✅ Available Balance' : '⚠️ Deficit — Paid more than received'}
+            </p>
           </div>
-          <div className="text-right space-y-1 pb-1">
-            <div className="flex justify-end gap-2 items-center">
-              <ArrowDown className="w-3 h-3 text-emerald-400" />
-              <span className="text-[7px] font-black opacity-40 uppercase">Received</span>
-              <span className="text-[10px] font-bold text-emerald-400">₹{totalFunds.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-end gap-2 items-center">
-              <ArrowUp className="w-3 h-3 text-rose-400" />
-              <span className="text-[7px] font-black opacity-40 uppercase">Paid Out</span>
-              <span className="text-[10px] font-bold text-rose-400">₹{totalSettled.toLocaleString()}</span>
-            </div>
+          <button onClick={() => setIsAddOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[8px] font-black uppercase active:scale-90 transition-all"
+            style={{background:"rgba(255,255,255,0.15)"}}>
+            <Plus className="w-3.5 h-3.5" /> Add Fund
+          </button>
+        </div>
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+          <div className="rounded-xl p-2.5 text-center" style={{background:"rgba(255,255,255,0.06)"}}>
+            <p className="text-[6px] font-black uppercase text-white/30 mb-1">Total Received</p>
+            <p className="text-[10px] font-black text-emerald-400">₹{totalFunds.toLocaleString()}</p>
+            <p className="text-[6px] text-white/30">{fundEntries.length} entries</p>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{background:"rgba(255,255,255,0.06)"}}>
+            <p className="text-[6px] font-black uppercase text-white/30 mb-1">Paid Out</p>
+            <p className="text-[10px] font-black text-rose-400">₹{totalSettled.toLocaleString()}</p>
+            <p className="text-[6px] text-white/30">{settlements.length} payments</p>
+          </div>
+          <div className="rounded-xl p-2.5 text-center" style={{background: remainingFunds < 0 ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.1)"}}>
+            <p className="text-[6px] font-black uppercase text-white/30 mb-1">Balance</p>
+            <p className={`text-[10px] font-black ${remainingFunds >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              {remainingFunds < 0 ? "-" : ""}₹{Math.abs(remainingFunds).toLocaleString()}
+            </p>
+            <p className={`text-[6px] ${remainingFunds >= 0 ? "text-emerald-400/60" : "text-rose-400/60"}`}>
+              {remainingFunds >= 0 ? "Surplus" : "Deficit"}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ADD FUND BUTTON */}
-      <button onClick={() => setIsAddOpen(true)} className="w-full py-4 bg-blue-600 text-white rounded-[1.8rem] font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-        <Plus className="w-4 h-4" /> Add Money Received
-      </button>
+
 
       {/* FUND ENTRIES HISTORY */}
       <div className="bg-white rounded-[1.8rem] border border-gray-100 overflow-hidden shadow-sm">
@@ -208,17 +246,25 @@ export default function AdminFundTab({ settlements, users, onRefresh }: AdminFun
         </div>
         <div className="max-h-60 overflow-y-auto">
           {fundEntries.length > 0 ? fundEntries.map((f) => (
-            <div key={f.id} className="flex items-center justify-between p-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+            <div key={f.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+              {f.receipt_url ? (
+                <div onClick={() => setPreviewImage(f.receipt_url)}
+                  className="w-10 h-10 rounded-xl border border-gray-100 overflow-hidden cursor-pointer flex-shrink-0">
+                  <img src={f.receipt_url} className="w-full h-full object-cover" alt="receipt" />
                 </div>
-                <div>
-                  <p className="text-[10px] font-black text-gray-800">{f.source || 'Company'}</p>
-                  <p className="text-[8px] text-gray-400 font-bold">{new Date(f.created_at).toLocaleDateString()} {f.note ? `• ${f.note}` : ''}</p>
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-4 h-4 text-blue-500" />
                 </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black text-gray-900 uppercase truncate">{f.source || 'Company'}</p>
+                <p className="text-[7px] text-gray-400 font-bold">
+                  {new Date(f.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}
+                  {f.note ? ` · ${f.note}` : ''}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <span className="text-[11px] font-black text-blue-600">₹{Number(f.amount).toLocaleString()}</span>
                 <button onClick={() => { setEditEntry(f); setEditForm({ amount: f.amount, source: f.source, note: f.note || '' }); }}
                   className="p-1.5 bg-gray-50 border border-gray-100 rounded-lg active:scale-90 transition-all">
@@ -280,22 +326,62 @@ export default function AdminFundTab({ settlements, users, onRefresh }: AdminFun
 
       {/* ADD FUND MODAL */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 space-y-4">
+        <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/70 backdrop-blur-sm">
+          <div className="flex min-h-full items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] p-5 shadow-2xl space-y-3 my-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-black text-[10px] uppercase text-gray-400 tracking-[0.2em]">➕ Add Money</h3>
-              <button onClick={() => setIsAddOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+              <div>
+                <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Add Fund Received</p>
+              </div>
+              <button onClick={() => { setIsAddOpen(false); setAddReceiptFile(null); setAddReceiptPreview(''); }}
+                className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
             </div>
-            <input type="number" placeholder="Amount" value={addForm.amount || ''} onChange={e => setAddForm({ ...addForm, amount: Number(e.target.value) })}
-              className="w-full p-4 bg-gray-50 rounded-2xl text-2xl font-black outline-none border-2 border-transparent focus:border-gray-100" />
-            <input type="text" placeholder="Source (e.g. Company Name)" value={addForm.source} onChange={e => setAddForm({ ...addForm, source: e.target.value })}
-              className="w-full p-4 bg-gray-50 rounded-2xl text-[10px] font-bold outline-none uppercase" />
-            <input type="text" placeholder="Note (optional)" value={addForm.note} onChange={e => setAddForm({ ...addForm, note: e.target.value })}
-              className="w-full p-4 bg-gray-50 rounded-2xl text-[10px] font-bold outline-none uppercase" />
+
+            {/* Amount */}
+            <div className="bg-gray-50 rounded-2xl px-4 py-3 flex items-center gap-2">
+              <span className="text-gray-400 font-black text-lg">₹</span>
+              <input type="number" placeholder="Amount"
+                value={addForm.amount || ''}
+                onChange={e => setAddForm({ ...addForm, amount: Number(e.target.value) })}
+                className="flex-1 bg-transparent text-xl font-black outline-none text-gray-900" />
+            </div>
+
+            {/* Sender name */}
+            <input type="text" placeholder="Sender / Company Name *"
+              value={addForm.source}
+              onChange={e => setAddForm({ ...addForm, source: e.target.value })}
+              className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-[10px] font-bold outline-none uppercase" />
+
+            {/* Note */}
+            <input type="text" placeholder="Note (optional)"
+              value={addForm.note}
+              onChange={e => setAddForm({ ...addForm, note: e.target.value })}
+              className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-[10px] font-bold outline-none uppercase" />
+
+            {/* Receipt upload */}
+            {!addReceiptPreview ? (
+              <label className="w-full h-20 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all">
+                <span className="text-lg">📄</span>
+                <span className="text-[7px] font-black uppercase text-gray-400 mt-0.5">Upload Receipt (optional)</span>
+                <input type="file" className="hidden" accept="image/*" onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) { setAddReceiptFile(f); setAddReceiptPreview(URL.createObjectURL(f)); }
+                }} />
+              </label>
+            ) : (
+              <div className="relative h-20 rounded-2xl overflow-hidden border-2 border-gray-100">
+                <img src={addReceiptPreview} className="w-full h-full object-cover" alt="receipt" />
+                <button onClick={() => { setAddReceiptFile(null); setAddReceiptPreview(''); }}
+                  className="absolute top-1.5 right-1.5 bg-red-500 text-white w-5 h-5 rounded-full font-black text-[9px] flex items-center justify-center">×</button>
+              </div>
+            )}
+
             <button onClick={handleAddFund} disabled={saving}
-              className="w-full py-5 bg-blue-600 text-white rounded-[1.8rem] font-black uppercase text-[10px] tracking-widest disabled:opacity-20 shadow-xl active:scale-95 transition-all">
-              {saving ? "Saving..." : "Add Fund"}
+              className="w-full py-4 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest disabled:opacity-20 active:scale-95 transition-all"
+              style={{background:"linear-gradient(135deg,#1e3a5f,#0f2444)"}}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Confirm & Add Fund"}
             </button>
+          </div>
           </div>
         </div>
       )}
